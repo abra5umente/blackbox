@@ -1,0 +1,53 @@
+###############################
+# OS / Editor / Tools
+###############################
+# Cursor
+.cursor/*
+
+# VSCode
+.vscode/
+.history/
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.DS_Store
+
+###############################
+# Env / Secrets
+###############################
+.env
+.env.*
+.env.local
+.envrc
+llm.json
+
+###############################
+# Go build/cache
+###############################
+bin/
+dist/
+build/
+*.exe
+*.exe~
+*.dll
+*.test
+*.out
+
+###############################
+# Project outputs and local assets
+###############################
+out/
+out/**
+
+# Local binaries/models not checked in
+whisper-bin/*
+models/*
+
+###############################
+# Logs
+###############################
+*.log
+*.log.*
+
