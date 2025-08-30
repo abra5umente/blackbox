@@ -26,7 +26,7 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: webassets.Assets},
 		Logger:           logger.NewDefaultLogger(),
 		BackgroundColour: &options.RGBA{R: 20, G: 20, B: 20, A: 1},
-		OnStartup:        func(ctx context.Context) { _ = ctx },
+		OnStartup:        func(ctx context.Context) { app.SetUIContext(ctx) },
 		Bind:             []interface{}{app},
 	})
 	if err != nil {

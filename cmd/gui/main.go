@@ -30,7 +30,7 @@ func main() {
 		Logger:           logger.NewDefaultLogger(),
 		BackgroundColour: &options.RGBA{R: 20, G: 20, B: 20, A: 1},
 		OnStartup: func(ctx context.Context) {
-			_ = ctx
+			app.SetUIContext(ctx)
 		},
 		Bind: []interface{}{
 			app,

@@ -10,12 +10,28 @@ export function IsRecording() {
   return window['go']['ui']['App']['IsRecording']();
 }
 
+export function PickTxtFromOutDir() {
+  return window['go']['ui']['App']['PickTxtFromOutDir']();
+}
+
+export function PickWavFromOutDir() {
+  return window['go']['ui']['App']['PickWavFromOutDir']();
+}
+
 export function SaveSettings(arg1) {
   return window['go']['ui']['App']['SaveSettings'](arg1);
 }
 
+export function SetUIContext(arg1) {
+  return window['go']['ui']['App']['SetUIContext'](arg1);
+}
+
 export function StartRecording(arg1) {
   return window['go']['ui']['App']['StartRecording'](arg1);
+}
+
+export function StartRecordingAdvanced(arg1, arg2) {
+  return window['go']['ui']['App']['StartRecordingAdvanced'](arg1, arg2);
 }
 
 export function StopRecording() {

@@ -14,6 +14,8 @@ import (
 	"blackbox/internal/audio"
 	"blackbox/internal/execx"
 	"blackbox/internal/wav"
+
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App exposes methods to the Wails frontend.
@@ -22,6 +24,7 @@ type App struct {
 
 	mu          sync.Mutex
 	recording   bool
+	dictation   bool
 	rec         *audio.Recorder
 	mic         *audio.MicRecorder
 	writer      *wav.Writer
@@ -30,6 +33,8 @@ type App struct {
 	cancel      context.CancelFunc
 	flushTicker *time.Ticker
 	wavPath     string
+
+	uiCtx context.Context
 }
 
 func NewApp(settingsPath string) (*App, error) {
@@ -78,106 +83,7 @@ func (a *App) IsRecording() bool {
 // StartRecording starts loopback (and optional mic) capture and writes to a new WAV file under OutDir.
 // Returns the path to the WAV file that will be written.
 func (a *App) StartRecording(withMic bool) (string, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.recording {
-		return "", errors.New("already recording")
-	}
-
-	cfg := a.settings.Get()
-	if err := os.MkdirAll(cfg.OutDir, 0755); err != nil {
-		return "", err
-	}
-
-	const sampleRate uint32 = 48000
-	const channels uint32 = 2
-	const bits uint16 = 16
-
-	ts := time.Now().Format("20060102_150405")
-	wavPath := filepath.Join(cfg.OutDir, ts+".wav")
-	writer, err := wav.NewWriter(wavPath, sampleRate, uint16(channels), bits)
-	if err != nil {
-		return "", fmt.Errorf("open wav: %w", err)
-	}
-
-	rec, err := audio.NewRecorder(8)
-	if err != nil {
-		_ = writer.Close()
-		return "", fmt.Errorf("init recorder: %w", err)
-	}
-	if err := rec.Start(sampleRate, channels); err != nil {
-		_ = writer.Close()
-		return "", fmt.Errorf("start recorder: %w", err)
-	}
-
-	var mic *audio.MicRecorder
-	if withMic {
-		m, err := audio.NewMicRecorder(8)
-		if err != nil {
-			rec.Stop()
-			_ = writer.Close()
-			return "", fmt.Errorf("init mic: %w", err)
-		}
-		if err := m.Start(sampleRate, channels); err != nil {
-			rec.Stop()
-			_ = writer.Close()
-			return "", fmt.Errorf("start mic: %w", err)
-		}
-		mic = m
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	flushTicker := time.NewTicker(500 * time.Millisecond)
-	runErrCh := make(chan error, 1)
-
-	// Writer loop
-	go func() {
-		var micBuf []byte
-		for {
-			select {
-			case <-ctx.Done():
-				runErrCh <- nil
-				return
-			case b, ok := <-rec.Data():
-				if !ok {
-					runErrCh <- nil
-					return
-				}
-				if len(b) > 0 {
-					if mic != nil {
-						select {
-						case micBuf = <-mic.Data():
-						default:
-							micBuf = nil
-						}
-						mixed := mixS16Stereo(b, micBuf)
-						if _, err := writer.Write(mixed); err != nil {
-							runErrCh <- err
-							return
-						}
-					} else {
-						if _, err := writer.Write(b); err != nil {
-							runErrCh <- err
-							return
-						}
-					}
-				}
-			case <-flushTicker.C:
-				_ = writer.Flush()
-			}
-		}
-	}()
-
-	a.recording = true
-	a.rec = rec
-	a.mic = mic
-	a.writer = writer
-	a.ctx = ctx
-	a.cancel = cancel
-	a.flushTicker = flushTicker
-	a.runErrCh = runErrCh
-	a.wavPath = wavPath
-	return wavPath, nil
+	return a.StartRecordingAdvanced(withMic, false)
 }
 
 // StopRecording stops capture and finalises the WAV. Returns the WAV path.
@@ -195,6 +101,7 @@ func (a *App) StopRecording() (string, error) {
 	runErrCh := a.runErrCh
 	cancel := a.cancel
 	wavPath := a.wavPath
+	a.dictation = false
 	a.rec = nil
 	a.mic = nil
 	a.writer = nil
@@ -334,4 +241,194 @@ func mixS16Stereo(loop, mic []byte) []byte {
 		out[i+1] = byte((uint16(int16(s)) >> 8) & 0xFF)
 	}
 	return out
+}
+
+// StartRecordingAdvanced allows selecting dictation mode (mic only) vs loopback+optional mic.
+func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.recording {
+		return "", errors.New("already recording")
+	}
+
+	cfg := a.settings.Get()
+	if err := os.MkdirAll(cfg.OutDir, 0755); err != nil {
+		return "", err
+	}
+
+	const sampleRate uint32 = 48000
+	const channels uint32 = 2
+	const bits uint16 = 16
+
+	ts := time.Now().Format("20060102_150405")
+	wavPath := filepath.Join(cfg.OutDir, ts+".wav")
+	writer, err := wav.NewWriter(wavPath, sampleRate, uint16(channels), bits)
+	if err != nil {
+		return "", fmt.Errorf("open wav: %w", err)
+	}
+
+	var rec *audio.Recorder
+	var mic *audio.MicRecorder
+
+	if dictation {
+		// Mic-only capture
+		m, err := audio.NewMicRecorder(8)
+		if err != nil {
+			_ = writer.Close()
+			return "", fmt.Errorf("init mic: %w", err)
+		}
+		if err := m.Start(sampleRate, channels); err != nil {
+			_ = writer.Close()
+			return "", fmt.Errorf("start mic: %w", err)
+		}
+		mic = m
+	} else {
+		// Loopback capture (optionally mix mic)
+		r, err := audio.NewRecorder(8)
+		if err != nil {
+			_ = writer.Close()
+			return "", fmt.Errorf("init recorder: %w", err)
+		}
+		if err := r.Start(sampleRate, channels); err != nil {
+			_ = writer.Close()
+			return "", fmt.Errorf("start recorder: %w", err)
+		}
+		rec = r
+		if withMic {
+			m, err := audio.NewMicRecorder(8)
+			if err != nil {
+				rec.Stop()
+				_ = writer.Close()
+				return "", fmt.Errorf("init mic: %w", err)
+			}
+			if err := m.Start(sampleRate, channels); err != nil {
+				rec.Stop()
+				_ = writer.Close()
+				return "", fmt.Errorf("start mic: %w", err)
+			}
+			mic = m
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	flushTicker := time.NewTicker(500 * time.Millisecond)
+	runErrCh := make(chan error, 1)
+
+	// Writer loop
+	go func() {
+		var micBuf []byte
+		for {
+			select {
+			case <-ctx.Done():
+				runErrCh <- nil
+				return
+			default:
+			}
+
+			if dictation {
+				// Mic only path
+				select {
+				case <-ctx.Done():
+					runErrCh <- nil
+					return
+				case b, ok := <-mic.Data():
+					if !ok {
+						runErrCh <- nil
+						return
+					}
+					if len(b) > 0 {
+						if _, err := writer.Write(b); err != nil {
+							runErrCh <- err
+							return
+						}
+					}
+				case <-flushTicker.C:
+					_ = writer.Flush()
+				}
+				continue
+			}
+
+			// Loopback primary path
+			select {
+			case <-ctx.Done():
+				runErrCh <- nil
+				return
+			case b, ok := <-rec.Data():
+				if !ok {
+					runErrCh <- nil
+					return
+				}
+				if len(b) > 0 {
+					if mic != nil {
+						select {
+						case micBuf = <-mic.Data():
+						default:
+							micBuf = nil
+						}
+						mixed := mixS16Stereo(b, micBuf)
+						if _, err := writer.Write(mixed); err != nil {
+							runErrCh <- err
+							return
+						}
+					} else {
+						if _, err := writer.Write(b); err != nil {
+							runErrCh <- err
+							return
+						}
+					}
+				}
+			case <-flushTicker.C:
+				_ = writer.Flush()
+			}
+		}
+	}()
+
+	a.recording = true
+	a.dictation = dictation
+	a.rec = rec
+	a.mic = mic
+	a.writer = writer
+	a.ctx = ctx
+	a.cancel = cancel
+	a.flushTicker = flushTicker
+	a.runErrCh = runErrCh
+	a.wavPath = wavPath
+	return wavPath, nil
+}
+
+// SetUIContext stores the Wails runtime context for dialog APIs.
+func (a *App) SetUIContext(ctx context.Context) { a.uiCtx = ctx }
+
+// PickWavFromOutDir opens a file picker defaulting to OutDir filtered to .wav
+func (a *App) PickWavFromOutDir() (string, error) {
+	if a.uiCtx == nil {
+		return "", errors.New("ui not ready")
+	}
+	cfg := a.settings.Get()
+	path, err := wruntime.OpenFileDialog(a.uiCtx, wruntime.OpenDialogOptions{
+		Title:            "Choose WAV",
+		DefaultDirectory: cfg.OutDir,
+		Filters:          []wruntime.FileFilter{{DisplayName: "WAV", Pattern: "*.wav"}},
+	})
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// PickTxtFromOutDir opens a file picker defaulting to OutDir filtered to .txt
+func (a *App) PickTxtFromOutDir() (string, error) {
+	if a.uiCtx == nil {
+		return "", errors.New("ui not ready")
+	}
+	cfg := a.settings.Get()
+	path, err := wruntime.OpenFileDialog(a.uiCtx, wruntime.OpenDialogOptions{
+		Title:            "Choose Transcript (.txt)",
+		DefaultDirectory: cfg.OutDir,
+		Filters:          []wruntime.FileFilter{{DisplayName: "Text", Pattern: "*.txt"}},
+	})
+	if err != nil {
+		return "", err
+	}
+	return path, nil
 }
