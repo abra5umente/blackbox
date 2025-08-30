@@ -1,10 +1,13 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -169,7 +172,7 @@ func (a *App) Transcribe(wavPath string) (string, error) {
 	return txtPath, nil
 }
 
-// Summarise is a stub: reads configs/llm.json and returns the message it would POST.
+// Summarise reads configs/llm.json and sends the transcript to OpenAI for summarization.
 func (a *App) Summarise(txtPath string) (string, error) {
 	if strings.TrimSpace(txtPath) == "" {
 		return "", errors.New("txt path required")
@@ -181,18 +184,143 @@ func (a *App) Summarise(txtPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	apiKey := os.Getenv(cfg.APIKeyEnv)
-	_ = apiKey // just to mirror CLI behaviour; no call is made
-	absTxt, _ := filepath.Abs(txtPath)
-	msg := fmt.Sprintf("Would POST to %s/chat/completions with model=%s using key env %s for file %s", cfg.BaseURL, cfg.Model, cfg.APIKeyEnv, absTxt)
-	return msg, nil
+
+	if cfg.APIKey == "" {
+		return "", fmt.Errorf("api_key is required in config")
+	}
+
+	// Read the transcript file
+	transcript, err := os.ReadFile(txtPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read transcript: %w", err)
+	}
+
+	// Create the summarization prompt
+	prompt := `You are an expert summarization specialist. Your task is to create a clear, concise summary of the provided transcript. Focus on:
+
+1. Key points and main ideas
+2. Important details and context
+3. Any action items or decisions mentioned
+4. Overall tone and sentiment
+
+Please provide a well-structured summary that captures the essence of the conversation while maintaining clarity and readability.`
+
+	// Prepare the chat request
+	request := chatRequest{
+		Model: cfg.Model,
+		Messages: []chatMessage{
+			{
+				Role:    "system",
+				Content: prompt,
+			},
+			{
+				Role:    "user",
+				Content: string(transcript),
+			},
+		},
+		MaxTokens: 2000,
+	}
+
+	// Make the API request
+	summary, err := a.makeOpenAIRequest(cfg.BaseURL, cfg.APIKey, request)
+	if err != nil {
+		return "", fmt.Errorf("API request failed: %w", err)
+	}
+
+	// Write summary to output file
+	outputPath := strings.TrimSuffix(txtPath, filepath.Ext(txtPath)) + "_summary.txt"
+	if err := os.WriteFile(outputPath, []byte(summary), 0644); err != nil {
+		return "", fmt.Errorf("failed to write summary: %w", err)
+	}
+
+	return fmt.Sprintf("Summary written to: %s\n\n--- Summary ---\n%s", outputPath, summary), nil
 }
 
 // Helper: load LLM config shared with CLI semantics
 type llmConfig struct {
-	BaseURL   string `json:"base_url"`
-	APIKeyEnv string `json:"api_key_env"`
-	Model     string `json:"model"`
+	BaseURL string `json:"base_url"`
+	APIKey  string `json:"api_key"`
+	Model   string `json:"model"`
+}
+
+// Chat API types
+type chatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type chatRequest struct {
+	Model       string        `json:"model"`
+	Messages    []chatMessage `json:"messages"`
+	MaxTokens   int           `json:"max_completion_tokens,omitempty"`
+	Temperature float64       `json:"temperature,omitempty"`
+}
+
+type chatResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+}
+
+func (a *App) makeOpenAIRequest(baseURL, apiKey string, request chatRequest) (string, error) {
+	// Prepare the request body
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Create HTTP request
+	url := baseURL + "/chat/completions"
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	// Make the request
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Check HTTP status
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response
+	var chatResp chatResponse
+	if err := json.Unmarshal(body, &chatResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Check for API errors
+	if chatResp.Error != nil {
+		return "", fmt.Errorf("API error: %s", chatResp.Error.Message)
+	}
+
+	// Extract summary from response
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("no choices in API response")
+	}
+
+	return chatResp.Choices[0].Message.Content, nil
 }
 
 func (a *App) loadLLMConfig(path string) (*llmConfig, error) {
@@ -204,7 +332,7 @@ func (a *App) loadLLMConfig(path string) (*llmConfig, error) {
 	if err := json.Unmarshal(b, &cfg); err != nil {
 		return nil, err
 	}
-	if cfg.BaseURL == "" || cfg.Model == "" || cfg.APIKeyEnv == "" {
+	if cfg.BaseURL == "" || cfg.Model == "" || cfg.APIKey == "" {
 		return nil, fmt.Errorf("missing required fields in config")
 	}
 	return &cfg, nil
