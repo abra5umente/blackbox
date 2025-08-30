@@ -1,0 +1,217 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blackbox</title>
+    <link href="/output.css" rel="stylesheet" />
+  </head>
+  <body class="font-sans m-0 text-gray-200 bg-gray-900">
+    <header class="px-4 py-3 bg-gray-800 border-b border-gray-700">
+      <strong class="text-white">Blackbox</strong>
+    </header>
+    <div class="flex gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
+      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-blue-600 text-white ring-2 ring-blue-400 hover:bg-blue-700 transition-colors" data-tab="record">Record</div>
+      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="transcribe">Transcribe</div>
+      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="rt">Record & Transcribe & Summarise</div>
+      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="summarise">Summarise</div>
+      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="settings">Settings</div>
+    </div>
+
+    <section id="record" class="page block p-4">
+      <div class="my-3">
+        <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+          <input type="checkbox" id="recWithMic" checked class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+          Use Microphone
+        </label>
+      </div>
+      <div class="my-3">
+        <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+          <input type="checkbox" id="recDictation" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+          Dictation mode (mic only)
+        </label>
+      </div>
+      <div class="my-3">
+        <button id="btnStart" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Start Recording</button>
+        <button id="btnStop" class="bg-gray-700 hover:bg-gray-600 text-gray-200 border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-2">Stop</button>
+      </div>
+      <div class="my-3"><div id="recStatus" class="text-gray-400 text-sm">Idle</div></div>
+    </section>
+
+    <section id="transcribe" class="page hidden p-4">
+      <div class="my-3">
+        <button id="btnPickWav" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors">Choose WAV from OutDir</button>
+        <span id="pickedWav" class="text-gray-400 text-sm ml-3"></span>
+      </div>
+      <div class="my-3">
+        <button id="btnTranscribe" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>Transcribe</button>
+      </div>
+      <div class="my-3"><div id="transcribeLog" class="whitespace-pre-wrap bg-gray-900 border border-gray-700 rounded-md p-3 max-h-56 overflow-auto text-sm"></div></div>
+    </section>
+
+    <section id="rt" class="page hidden p-4">
+      <div class="my-3">
+        <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+          <input type="checkbox" id="rtWithMic" checked class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+          Use Microphone
+        </label>
+      </div>
+      <div class="my-3">
+        <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+          <input type="checkbox" id="rtDictation" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+          Dictation mode (mic only)
+        </label>
+      </div>
+      <div class="my-3">
+        <button id="btnRTStart" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Begin</button>
+        <button id="btnRTStop" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-2" disabled>Stop Recording</button>
+      </div>
+      <div class="my-3"><div id="rtLog" class="whitespace-pre-wrap bg-gray-900 border border-gray-700 rounded-md p-3 max-h-56 overflow-auto text-sm"></div></div>
+    </section>
+
+    <section id="summarise" class="page hidden p-4">
+      <div class="my-3">
+        <button id="btnPickTxt" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors">Choose TXT from OutDir</button>
+        <span id="pickedTxt" class="text-gray-400 text-sm ml-3"></span>
+      </div>
+      <div class="my-3">
+        <button id="btnSummarise" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>Summarise</button>
+      </div>
+      <div class="my-3"><div id="summariseLog" class="whitespace-pre-wrap bg-gray-900 border border-gray-700 rounded-md p-3 max-h-56 overflow-auto text-sm"></div></div>
+    </section>
+
+    <section id="settings" class="page hidden p-4">
+      <div class="my-3">
+        <label class="block mb-2 text-gray-300">Output Directory</label>
+        <input type="text" id="outDir" placeholder="./out" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-96 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+      </div>
+      <div class="my-3">
+        <button id="btnSaveSettings" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors">Save Settings</button>
+      </div>
+      <div class="my-3"><div id="settingsInfo" class="text-gray-400 text-sm"></div></div>
+    </section>
+
+    <script src="/wailsjs/runtime/runtime.js"></script>
+    <script src="/wailsjs/go/ui/App.js"></script>
+    <script>
+      const setActive = (name) => {
+        document.querySelectorAll('.tab').forEach(t => {
+          if (t.dataset.tab === name) {
+            t.classList.add('bg-blue-600', 'text-white', 'ring-2', 'ring-blue-400');
+            t.classList.remove('bg-gray-700', 'text-gray-300');
+          } else {
+            t.classList.add('bg-gray-700', 'text-gray-300');
+            t.classList.remove('bg-blue-600', 'text-white', 'ring-2', 'ring-blue-400');
+          }
+        });
+        document.querySelectorAll('.page').forEach(p => {
+          if (p.id === name) {
+            p.classList.remove('hidden');
+            p.classList.add('block');
+          } else {
+            p.classList.add('hidden');
+            p.classList.remove('block');
+          }
+        });
+      };
+      let pickedTxt = '';
+      document.getElementById('btnPickTxt').onclick = async () => {
+        const s = await App().GetSettings();
+        const outDir = s.out_dir || s.OutDir || './out';
+        const f = await App().PickTxtFromOutDir();
+        if (f) { pickedTxt = f; document.getElementById('pickedTxt').textContent = f; document.getElementById('btnSummarise').disabled = false; }
+      };
+      document.getElementById('btnSummarise').onclick = async () => {
+        document.getElementById('summariseLog').textContent = 'Running...';
+        try {
+          const msg = await App().Summarise(pickedTxt);
+          document.getElementById('summariseLog').textContent = msg;
+        } catch (e) {
+          document.getElementById('summariseLog').textContent = 'Error: ' + e;
+        }
+      };
+      document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => setActive(tab.dataset.tab)));
+
+      // Wails bindings
+      const App = () => (window.go && window.go.ui && window.go.ui.App) ? window.go.ui.App : null;
+
+      // Settings
+      const loadSettings = async () => {
+        try {
+          const s = await App().GetSettings();
+          document.getElementById('outDir').value = (s && (s.out_dir || s.OutDir)) || './out';
+        } catch (e) {}
+      };
+      const saveSettings = async () => {
+        const cfg = { out_dir: document.getElementById('outDir').value };
+        const res = await App().SaveSettings(JSON.stringify(cfg));
+        document.getElementById('settingsInfo').textContent = 'Saved: ' + ((res && (res.out_dir || res.OutDir)) || '');
+      };
+
+      // Record
+      let currentWav = '';
+      document.getElementById('btnStart').onclick = async () => {
+        const useMic = document.getElementById('recWithMic').checked;
+        const dict = document.getElementById('recDictation').checked;
+        const p = dict ? await App().StartRecordingAdvanced(useMic, true) : await App().StartRecording(useMic);
+        currentWav = p;
+        document.getElementById('recStatus').textContent = 'Recording to ' + p;
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnStop').disabled = false;
+      };
+      document.getElementById('btnStop').onclick = async () => {
+        const p = await App().StopRecording();
+        document.getElementById('recStatus').textContent = 'Saved: ' + p;
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnStop').disabled = true;
+      };
+
+      // Transcribe single
+      let pickedWav = '';
+      document.getElementById('btnPickWav').onclick = async () => {
+        const s = await App().GetSettings();
+        const outDir = s.out_dir || s.OutDir || './out';
+        const f = await App().PickWavFromOutDir();
+        if (f) { pickedWav = f; document.getElementById('pickedWav').textContent = f; document.getElementById('btnTranscribe').disabled = false; }
+      };
+      document.getElementById('btnTranscribe').onclick = async () => {
+        document.getElementById('transcribeLog').textContent = 'Running...';
+        try {
+          const txt = await App().Transcribe(pickedWav);
+          document.getElementById('transcribeLog').textContent = 'Done: ' + txt;
+        } catch (e) {
+          document.getElementById('transcribeLog').textContent = 'Error: ' + e;
+        }
+      };
+
+      // Record+Transcribe+Summarise
+      let rtWav = '';
+      document.getElementById('btnRTStart').onclick = async () => {
+        const useMic = document.getElementById('rtWithMic').checked;
+        const dict = document.getElementById('rtDictation').checked;
+        rtWav = dict ? await App().StartRecordingAdvanced(useMic, true) : await App().StartRecording(useMic);
+        document.getElementById('rtLog').textContent = 'Recording to ' + rtWav + '\nClick Stop when ready.';
+        document.getElementById('btnRTStart').disabled = true;
+        document.getElementById('btnRTStop').disabled = false;
+      };
+      document.getElementById('btnRTStop').onclick = async () => {
+        document.getElementById('btnRTStop').disabled = true;
+        const p = await App().StopRecording();
+        document.getElementById('rtLog').textContent = 'Saved: ' + p + '\nTranscribing...';
+        try {
+          const txt = await App().Transcribe(p);
+          document.getElementById('rtLog').textContent += '\nTranscribed: ' + txt + '\nSummarising...';
+          const msg = await App().Summarise(txt);
+          document.getElementById('rtLog').textContent += '\n' + msg;
+        } catch (e) {
+          document.getElementById('rtLog').textContent += '\nError: ' + e;
+        }
+        document.getElementById('btnRTStart').disabled = false;
+      };
+
+      document.getElementById('btnSaveSettings').onclick = saveSettings;
+
+      loadSettings();
+    </script>
+  </body>
+</html>

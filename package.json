@@ -1,0 +1,13 @@
+{
+  "name": "blackbox",
+  "version": "1.0.0",
+  "description": "Windows audio capture and transcription tool with Wails GUI",
+  "scripts": {
+    "build:css": "cd frontend && npm run tailwind:build",
+    "build:gui": "npm run build:css && wails build -clean",
+    "dev": "wails dev"
+  },
+  "keywords": ["audio", "transcription", "wails", "tailwind"],
+  "author": "",
+  "license": "MIT"
+}

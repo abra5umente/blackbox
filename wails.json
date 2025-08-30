@@ -4,8 +4,8 @@
   "author": { "name": "", "email": "" },
   "frontend": {
     "dir": "frontend",
-    "install": "",
-    "build": ""
+    "install": "npm install",
+    "build": "npm run tailwind:build"
   },
   "wailsjsdir": "frontend/wailsjs",
   "assetdir": "frontend/dist",
@@ -19,6 +19,8 @@
     "console": false,
     "icon": "build/windows/icon.ico"
   }
+  ,
+  "frontend:dev:watcher": "npm run tailwind:watch"
 }
 
 
