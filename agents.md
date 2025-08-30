@@ -23,9 +23,17 @@ blackbox/
 │   ├── wav/               # WAV file handling
 │   └── execx/             # External process execution
 ├── frontend/               # Static web assets for GUI
+│   ├── src/               # Source HTML for Tailwind scanning
+│   ├── dist/              # Built assets (HTML, CSS, JS)
+│   ├── tailwind.config.js # Tailwind CSS configuration
+│   ├── package.json       # Frontend dependencies and scripts
+│   └── wailsjs/           # Wails-generated bindings
 ├── models/                 # Whisper model files
 ├── whisper-bin/            # Whisper.cpp executables
 ├── configs/                # Configuration files
+├── package.json            # Project build scripts
+├── build.bat               # Windows batch build script
+├── build.ps1               # PowerShell build script
 └── out/                    # Output directory
 ```
 
@@ -34,7 +42,8 @@ blackbox/
 - **GUI Framework**: Wails v2 (Go + WebView2)
 - **Audio**: malgo (WASAPI loopback + capture)
 - **Transcription**: whisper.cpp
-- **Frontend**: Vanilla HTML/CSS/JavaScript
+- **Frontend**: Vanilla HTML/CSS/JavaScript with Tailwind CSS
+- **Styling**: Tailwind CSS v3.4.17 + PostCSS + Autoprefixer
 - **Platform**: Windows 11 only
 
 ## Core Components
@@ -120,8 +129,9 @@ blackbox/
 
 #### Structure
 - **Assets**: Embedded via Go embed in `frontend/assets.go`
-- **UI**: Single-page tabbed interface
+- **UI**: Single-page tabbed interface with modern Tailwind CSS styling
 - **Scripts**: Vanilla JavaScript with Wails bindings
+- **Styling**: Tailwind CSS v3.4.17 for rapid UI development
 
 #### Tabs
 1. **Record**: Audio capture with mic/dictation options
@@ -129,6 +139,13 @@ blackbox/
 3. **Record & Transcribe & Summarise**: Combined workflow
 4. **Summarise**: TXT file selection and processing
 5. **Settings**: Configuration management
+
+#### Tailwind CSS Integration
+- **Configuration**: `frontend/tailwind.config.js` - scans HTML/JS files for classes
+- **Input CSS**: `frontend/src/input.css` - contains Tailwind directives
+- **Build Process**: Automated CSS generation with npm scripts
+- **Development**: Watch mode for automatic CSS rebuilding
+- **Production**: CSS embedded in final executable
 
 ## API Interfaces
 
@@ -233,6 +250,13 @@ SaveSettings(jsonStr string) (UISettings, error)      // Saves and returns confi
 - **Recovery**: Clean up resources on errors
 - **User Feedback**: Return meaningful error messages
 
+### 5. Tailwind CSS Development
+- **Content Scanning**: Configure `tailwind.config.js` to scan source HTML files
+- **Build Process**: Use npm scripts for CSS generation (`tailwind:build`, `tailwind:watch`)
+- **Source Files**: Maintain HTML in `frontend/src/` for Tailwind scanning
+- **Production**: Ensure CSS is built before Wails build process
+- **Wails Integration**: Configure `wails.json` with `frontend:dev:watcher` for development
+
 ## Build and Deployment
 
 ### Development
@@ -240,17 +264,23 @@ SaveSettings(jsonStr string) (UISettings, error)      // Saves and returns confi
 # Build all CLI tools
 go build ./...
 
-# Build GUI
-wails build -clean
+# Build GUI with Tailwind CSS
+npm run build:css && wails build -clean
 
-# Run GUI in development
+# Or use automated build script
+npm run build:gui
+
+# Run GUI in development (includes Tailwind watcher)
 wails dev
 ```
 
 ### Production
 ```bash
-# Build production GUI
-wails build -clean
+# Build production GUI with Tailwind CSS
+npm run build:gui
+
+# Or manually:
+npm run build:css && wails build -clean
 
 # Output: build/bin/blackbox-gui.exe
 ```
@@ -260,10 +290,38 @@ wails build -clean
 - **Wails**: `github.com/wailsapp/wails/v2`
 - **Audio**: `github.com/gen2brain/malgo`
 - **System**: `golang.org/x/sys`
+- **Frontend**: Node.js and npm for Tailwind CSS build process
+- **CSS Framework**: `tailwindcss@^3.4.0`, `postcss`, `autoprefixer`
+
+## Build Scripts and Automation
+
+### Package.json Scripts
+The project includes several npm scripts for automated builds:
+
+- **`npm run build:css`**: Builds Tailwind CSS for production
+- **`npm run build:gui`**: Complete production build (CSS + Wails)
+- **`npm run dev`**: Runs Wails development server
+
+### Build Scripts
+Cross-platform build automation:
+
+- **Windows**: `build.bat` - Batch file for production builds
+- **PowerShell**: `build.ps1` - PowerShell script for production builds
+- **npm**: `npm run build:gui` - Cross-platform build command
+
+### Tailwind CSS Workflow
+```bash
+# Development (automatic CSS rebuilding)
+wails dev
+
+# Production build
+npm run build:gui
+
+# Manual CSS build
+cd frontend && npm run tailwind:build
+```
 
 ## Common Tasks
-
-### Adding New Audio Sources
 1. Create new recorder in `internal/audio/`
 2. Implement `Start()`, `Stop()`, `Data()` methods
 3. Add to `App.StartRecordingAdvanced()` logic
@@ -281,6 +339,14 @@ wails build -clean
 3. Add frontend UI elements
 4. Wire up in workflow tabs
 
+### UI Development with Tailwind CSS
+1. **HTML Structure**: Add new HTML elements in `frontend/src/index.html`
+2. **Styling**: Use Tailwind utility classes for consistent design
+3. **Responsiveness**: Leverage Tailwind's responsive utilities
+4. **Accessibility**: Include proper focus states and ARIA attributes
+5. **CSS Generation**: Ensure new classes are included in Tailwind build
+6. **Testing**: Verify styling in both development and production builds
+
 ## Troubleshooting
 
 ### Common Issues
@@ -288,12 +354,20 @@ wails build -clean
 2. **Whisper Errors**: Verify binary path and model existence
 3. **GUI Not Responding**: Ensure WebView2 runtime is installed
 4. **File Picker Issues**: Check UI context initialization
+5. **Tailwind CSS Not Working**: Verify CSS build process and file paths
+6. **Styling Missing in Production**: Ensure CSS is built before Wails build
 
 ### Debug Steps
 1. Check console output for error messages
 2. Verify file paths and permissions
 3. Test CLI tools independently
 4. Check environment variable overrides
+5. **Tailwind CSS Issues**:
+   - Verify `frontend/src/index.html` exists and contains classes
+   - Check `frontend/dist/output.css` file size and content
+   - Run `npm run tailwind:build` manually
+   - Verify `tailwind.config.js` content paths
+   - Check that CSS is linked in HTML files
 
 ## Future Enhancements
 
@@ -304,6 +378,13 @@ wails build -clean
 - Integration with actual LLM APIs
 - Audio format conversion options
 - Batch processing capabilities
+
+### Current UI Features
+- **Modern Dark Theme**: Professional appearance with proper contrast
+- **Responsive Layout**: Clean spacing and typography using Tailwind utilities
+- **Interactive Elements**: Hover effects, focus states, and smooth transitions
+- **Accessibility**: Proper focus indicators and disabled states
+- **Tabbed Interface**: Clean navigation between different functionality
 
 ### Extension Points
 - Audio source plugins

@@ -46,6 +46,16 @@ whisper-bin/*
 models/*
 
 ###############################
+# Frontend build artifacts
+###############################
+# Keep source files but ignore generated CSS
+frontend/dist/output.css
+frontend/dist/*.css.map
+
+# Node modules (if not using npm workspaces)
+# frontend/node_modules/
+
+###############################
 # Logs
 ###############################
 *.log

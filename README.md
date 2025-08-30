@@ -84,8 +84,11 @@ The project root `package.json` includes these build scripts:
 ## GUI Quickstart
 
 ```powershell
-# Build the GUI
-wails build -clean
+# Build the GUI with Tailwind CSS
+npm run build:gui
+
+# Or manually:
+npm run build:css && wails build -clean
 
 # Run it
 ./build/bin/blackbox-gui.exe
