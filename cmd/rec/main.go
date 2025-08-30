@@ -23,9 +23,9 @@ func main() {
 	outDirDefault := getenvDefault("LOOPBACK_NOTES_OUT", "./out")
 	var (
 		outDir     = flag.String("out-dir", outDirDefault, "Output directory")
-		sampleRate = flag.Uint("sample-rate", 48000, "Sample rate (Hz)")
+		sampleRate = flag.Uint("sample-rate", 16000, "Sample rate (Hz) - 16kHz recommended for speech") // Changed from 48000
 		bits       = flag.Uint("bits", 16, "Bits per sample (16)")
-		channels   = flag.Uint("channels", 2, "Channels (2)")
+		channels   = flag.Uint("channels", 1, "Channels (1=mono recommended for speech)") // Changed from 2
 		device     = flag.String("device", "", "Device id/name (ignored; default render loopback)")
 		dur        = flag.Duration("dur", 0, "Record duration (e.g. 5s, 2m). 0=manual stop")
 		stopKey    = flag.String("stop-key", "", "Hotkey chord to stop, e.g. 'ctrl+shift+9'")
@@ -118,7 +118,7 @@ func main() {
 						default:
 							micBuf = nil
 						}
-						mixed := mixS16Stereo(b, micBuf)
+						mixed := mixS16Mono(b, micBuf)
 						if _, err := writer.Write(mixed); err != nil {
 							runErrCh <- err
 							return
@@ -313,8 +313,8 @@ func parseFKey(k string) (uint32, error) {
 	return 0, fmt.Errorf("unsupported f-key: %s", k)
 }
 
-// mixS16Stereo mixes two S16LE interleaved PCM buffers (same channels/rate). If mic is nil/short, uses loop only.
-func mixS16Stereo(loop, mic []byte) []byte {
+// mixS16Mono mixes two S16LE mono PCM buffers with simple averaging. If mic is nil/short, uses loop only.
+func mixS16Mono(loop, mic []byte) []byte {
 	if len(mic) == 0 {
 		return loop
 	}

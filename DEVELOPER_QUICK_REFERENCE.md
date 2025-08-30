@@ -100,6 +100,8 @@ npm run tailwind:build      # Generates output.css
 1. **Recorder**: Use `internal/audio/loopback.go` or `mic.go`
 2. **WAV**: Use `internal/wav/writer.go` for file output
 3. **Mixing**: Sample-wise averaging in S16LE format
+4. **Format**: 16kHz mono PCM S16LE (optimized for speech recognition)
+5. **File Sizes**: ~1.6-2.0 MB/minute, ~100 MB/hour
 
 ## 🐛 **Troubleshooting**
 

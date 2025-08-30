@@ -345,8 +345,8 @@ func getenvDefault(k, def string) string {
 	return def
 }
 
-// mixS16Stereo mixes two S16LE buffers (same channels) with simple averaging.
-func mixS16Stereo(loop, mic []byte) []byte {
+// mixS16Mono mixes two S16LE mono buffers with simple averaging.
+func mixS16Mono(loop, mic []byte) []byte {
 	if len(mic) == 0 {
 		return loop
 	}
@@ -384,8 +384,8 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 		return "", err
 	}
 
-	const sampleRate uint32 = 48000
-	const channels uint32 = 2
+	const sampleRate uint32 = 16000 // Reduced from 48000 - 16kHz is standard for speech recognition
+	const channels uint32 = 1       // Reduced from 2 - mono is sufficient for speech and cuts file size in half
 	const bits uint16 = 16
 
 	ts := time.Now().Format("20060102_150405")
@@ -493,7 +493,7 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 						default:
 							micBuf = nil
 						}
-						mixed := mixS16Stereo(b, micBuf)
+						mixed := mixS16Mono(b, micBuf)
 						if _, err := writer.Write(mixed); err != nil {
 							runErrCh <- err
 							return

@@ -44,7 +44,7 @@ func NewRecorder(bufferCallbacks int) (*Recorder, error) {
 }
 
 // Start opens the default render device in loopback with the specified format.
-// sampleRate must match device mix rate (48k typical). channels=2, format S16.
+// sampleRate must match device mix rate (16k recommended for speech). channels=1 (mono) recommended, format S16.
 func (r *Recorder) Start(sampleRate uint32, channels uint32) error {
 	if r.ctx == nil {
 		return errors.New("context not initialized")

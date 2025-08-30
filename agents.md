@@ -68,8 +68,10 @@ blackbox/
 
 #### Audio Format
 - **Format**: PCM S16LE (16-bit signed little-endian)
-- **Sample Rate**: 48 kHz (configurable)
-- **Channels**: 2 (stereo)
+- **Sample Rate**: 16 kHz (optimized for speech recognition)
+- **Channels**: 1 (mono - sufficient for speech and reduces file size)
+- **File Sizes**: ~1.6-2.0 MB per minute, approximately 100 MB per hour
+- **Quality**: Optimized for transcription while maintaining excellent speech clarity
 - **Mixing**: Sample-wise averaging to prevent clipping
 
 ### 2. WAV Handling (`internal/wav/`)

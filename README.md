@@ -198,9 +198,9 @@ For production builds, the process ensures Tailwind CSS is properly included:
 
 # Flags
   --out-dir      "./out"
-  --sample-rate  48000
+  --sample-rate  16000    # 16kHz recommended for speech recognition
   --bits         16
-  --channels     2
+  --channels     1        # Mono recommended for speech (cuts file size in half)
   --device       ""       # optional device name/id (default render device is used)
   --dur          0        # duration (0 = manual stop)
   --stop-key     ""       # e.g. "ctrl+shift+9"
@@ -243,5 +243,9 @@ No network request is sent in this pass; it only validates config and prints wha
 
 ## Audio Format
 
-- PCM S16LE, 48 kHz, stereo.
+- **Format**: PCM S16LE (16-bit signed little-endian)
+- **Sample Rate**: 16 kHz (optimized for speech recognition)
+- **Channels**: 1 (mono - sufficient for speech and reduces file size)
+- **File Size**: ~1.6-2.0 MB per minute, approximately 100 MB per hour
+- **Quality**: Optimized for transcription while maintaining excellent speech clarity
 - Loopback uses the default render device; microphone uses the default capture device.

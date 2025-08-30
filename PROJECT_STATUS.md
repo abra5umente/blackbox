@@ -140,8 +140,10 @@ build.bat
 
 ### **Audio Format**
 - **Format**: PCM S16LE (16-bit signed little-endian)
-- **Sample Rate**: 48 kHz (configurable)
-- **Channels**: 2 (stereo)
+- **Sample Rate**: 16 kHz (optimized for speech recognition)
+- **Channels**: 1 (mono - sufficient for speech and reduces file size)
+- **File Sizes**: ~1.6-2.0 MB per minute, approximately 100 MB per hour
+- **Quality**: Optimized for transcription while maintaining excellent speech clarity
 - **Mixing**: Sample-wise averaging to prevent clipping
 
 ### **Dependencies**
@@ -187,7 +189,7 @@ build.bat
 
 ### **Technical Limitations**
 - Audio format limited to WAV/PCM S16LE
-- Sample rate fixed at 48 kHz
+- Sample rate optimized at 16 kHz for speech recognition
 - No real-time transcription streaming
 - No cloud storage integration
 - Limited audio processing options
@@ -237,6 +239,12 @@ build.bat
 - **CSS Build**: Tailwind CSS builds in ~4-5 seconds
 - **Production Build**: Complete build in ~6-7 seconds
 - **Executable Size**: ~10.6 MB (includes all assets)
+
+### **Audio Recording Performance**
+- **File Size**: ~1.6-2.0 MB per minute (6x reduction from previous 48kHz stereo)
+- **Storage Efficiency**: Approximately 100 MB per hour of recording
+- **Quality**: Maintains excellent transcription accuracy with optimized speech format
+- **Format**: 16kHz mono PCM S16LE (industry standard for speech recognition)
 
 ### **Runtime Performance**
 - **Audio Latency**: Minimal (WASAPI loopback)
