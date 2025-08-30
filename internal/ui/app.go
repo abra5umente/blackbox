@@ -469,6 +469,7 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 							runErrCh <- err
 							return
 						}
+						a.emitAudioData(b, "microphone")
 					}
 				case <-flushTicker.C:
 					_ = writer.Flush()
@@ -498,11 +499,13 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 							runErrCh <- err
 							return
 						}
+						a.emitAudioData(mixed, "loopback")
 					} else {
 						if _, err := writer.Write(b); err != nil {
 							runErrCh <- err
 							return
 						}
+						a.emitAudioData(b, "loopback")
 					}
 				}
 			case <-flushTicker.C:
@@ -526,6 +529,17 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 
 // SetUIContext stores the Wails runtime context for dialog APIs.
 func (a *App) SetUIContext(ctx context.Context) { a.uiCtx = ctx }
+
+// emitAudioData sends real-time audio data to the frontend for spectrum analysis
+func (a *App) emitAudioData(data []byte, source string) {
+	if a.uiCtx != nil {
+		wruntime.EventsEmit(a.uiCtx, "audioData", map[string]interface{}{
+			"source": source,    // "loopback" or "microphone"
+			"data":   data,      // Raw PCM S16LE data
+			"length": len(data), // Data length in bytes
+		})
+	}
+}
 
 // PickWavFromOutDir opens a file picker defaulting to OutDir filtered to .wav
 func (a *App) PickWavFromOutDir() (string, error) {

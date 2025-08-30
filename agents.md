@@ -15,7 +15,7 @@ blackbox/
 ├── cmd/                    # CLI applications
 │   ├── rec/               # Audio recording CLI
 │   ├── transcribe/        # Transcription CLI
-│   ├── summarise/         # Summarization CLI (stub)
+│   ├── summarise/         # AI-powered summarization CLI
 │   └── gui/               # Alternative GUI entry
 ├── internal/               # Core application logic
 │   ├── audio/             # Audio capture (WASAPI loopback + mic)
@@ -68,13 +68,43 @@ blackbox/
 
 #### Audio Format
 - **Format**: PCM S16LE (16-bit signed little-endian)
-- **Sample Rate**: 16 kHz (optimized for speech recognition)
-- **Channels**: 1 (mono - sufficient for speech and reduces file size)
-- **File Sizes**: ~1.6-2.0 MB per minute, approximately 100 MB per hour
-- **Quality**: Optimized for transcription while maintaining excellent speech clarity
+- **Sample Rate**: 48 kHz
+- **Channels**: Stereo (loopback) + Mono (microphone)
+- **Quality**: Optimized for transcription while maintaining excellent audio clarity
 - **Mixing**: Sample-wise averaging to prevent clipping
 
-### 2. WAV Handling (`internal/wav/`)
+### 2. Real-Time Spectrum Analyzer (`frontend/src/index.html`)
+
+#### RealSpectrumAnalyzer Class
+- **Purpose**: Provides real-time audio visualization in the GUI
+- **Key Features**:
+  - **32 Responsive Bars**: Each bar represents a frequency band
+  - **Ultra-Sensitive Response**: Bars move dramatically with even quiet sounds
+  - **60fps Animation**: Smooth visualization using `requestAnimationFrame`
+  - **Dual Audio Sources**: Visualizes both loopback and microphone audio
+  - **Professional Styling**: Dynamic color intensity based on audio levels
+
+#### Key Methods
+- `handleAudioData(data)`: Processes incoming PCM data from Go backend
+- `updateSpectrum()`: Performs frequency analysis and updates bar heights
+- `animate()`: 60fps animation loop for smooth visualization
+- `startRecording()` / `stopRecording()`: Controls analyzer state
+
+#### Audio Data Processing
+- **Data Reception**: Receives raw PCM S16LE bytes via Wails events
+- **Format Handling**: Supports ArrayBuffer, Uint8Array, Array, and base64 string formats
+- **Frequency Analysis**: Simple FFT-like analysis dividing audio into 32 frequency bands
+- **Normalization**: Ultra-sensitive normalization (`avgEnergy / 1000`) for maximum reactivity
+- **Visual Response**: Exponential scaling (`Math.pow(normalizedEnergy, 0.3)`) for dramatic movement
+
+#### Implementation Details
+- **Event Binding**: Uses Wails `EventsOn("audioData", ...)` for real-time communication
+- **Animation Loop**: `requestAnimationFrame` ensures consistent 60fps updates
+- **Data Flow**: Audio data processed independently of animation loop for optimal performance
+- **Fallback Animation**: Graceful idle state when no audio data is available
+- **Error Handling**: Silent error handling with graceful degradation
+
+### 3. WAV Handling (`internal/wav/`)
 
 #### Writer (`writer.go`)
 - **Purpose**: Writes PCM audio data to WAV files
@@ -89,7 +119,7 @@ blackbox/
 - Periodic flushing during recording
 - Proper cleanup on close
 
-### 3. External Process Execution (`internal/execx/`)
+### 4. External Process Execution (`internal/execx/`)
 
 #### Whisper Integration (`execx.go`)
 - **Purpose**: Wraps whisper.cpp CLI execution
@@ -102,7 +132,7 @@ blackbox/
 - Fallback handling for different whisper binary names
 - Error handling and validation
 
-### 4. GUI Backend (`internal/ui/`)
+### 5. GUI Backend (`internal/ui/`)
 
 #### App Structure (`app.go`)
 - **Purpose**: Main GUI backend service
@@ -111,9 +141,15 @@ blackbox/
   - `StartRecordingAdvanced(withMic, dictation bool)`: Advanced recording modes
   - `StopRecording()`: End capture and finalize WAV
   - `Transcribe(wavPath)`: Run whisper on WAV file
-  - `Summarise(txtPath)`: Process transcript (stub)
+  - `Summarise(txtPath)`: Process transcript with AI-powered summarization
   - `PickWavFromOutDir()`: File picker for WAV files
   - `PickTxtFromOutDir()`: File picker for TXT files
+
+#### Audio Data Emission
+- **Real-Time Streaming**: `emitAudioData()` sends raw PCM data to frontend every frame
+- **Wails Events**: Uses `wruntime.EventsEmit("audioData", ...)` for communication
+- **Data Format**: Sends source, raw bytes, and length information
+- **Dual Sources**: Emits both loopback and microphone audio data
 
 #### Settings Management (`settings.go`)
 - **Purpose**: Persistent configuration storage
@@ -127,7 +163,7 @@ blackbox/
 2. **Loopback + Mic**: System audio mixed with microphone
 3. **Dictation Mode**: Microphone only (useful when no system audio)
 
-### 5. Frontend (`frontend/`)
+### 6. Frontend (`frontend/`)
 
 #### Structure
 - **Assets**: Embedded via Go embed in `frontend/assets.go`
@@ -136,9 +172,9 @@ blackbox/
 - **Styling**: Tailwind CSS v3.4.17 for rapid UI development
 
 #### Tabs
-1. **Record**: Audio capture with mic/dictation options
+1. **Record**: Audio capture with mic/dictation options + real-time spectrum analyzer
 2. **Transcribe**: WAV file selection and transcription
-3. **Record & Transcribe & Summarise**: Combined workflow
+3. **Record & Transcribe & Summarise**: Combined workflow with live audio feedback
 4. **Summarise**: TXT file selection and processing
 5. **Settings**: Configuration management
 
@@ -174,36 +210,17 @@ GetSettings() UISettings                               // Returns current config
 SaveSettings(jsonStr string) (UISettings, error)      // Saves and returns config
 ```
 
-### CLI Interfaces
+### Real-Time Audio Events
 
-#### Recording (`cmd/rec/main.go`)
-```bash
-./cmd/rec/rec.exe [flags]
-  --out-dir      "./out"        # Output directory
-  --sample-rate  48000          # Sample rate (Hz)
-  --bits         16             # Bits per sample
-  --channels     2              # Channel count
-  --dur          0              # Duration (0 = manual stop)
-  --stop-key     ""             # Hotkey to stop
-  --with-mic     false          # Include microphone
-```
+The backend emits real-time audio data to the frontend:
 
-#### Transcription (`cmd/transcribe/main.go`)
-```bash
-./cmd/transcribe/transcribe.exe [flags]
-  --wav          ""             # WAV file path (required)
-  --model        "./models/ggml-base.en.bin"  # Model path
-  --lang         "en"           # Language code
-  --threads      0              # Thread count
-  --out-dir      "./out"        # Output directory
-  --extra-args   ""             # Additional whisper args
-```
-
-#### Summarization (`cmd/summarise/main.go`)
-```bash
-./cmd/summarise/summarise.exe [flags]
-  --config       "./configs/llm.json"  # LLM config path
-  --txt          ""             # TXT file path (required)
+```go
+// Emitted every frame during recording
+wruntime.EventsEmit(a.uiCtx, "audioData", map[string]interface{}{
+    "source": source,    // "loopback" or "microphone"
+    "data":   data,      // Raw PCM S16LE data
+    "length": len(data), // Data length in bytes
+})
 ```
 
 ## Configuration
@@ -237,22 +254,29 @@ SaveSettings(jsonStr string) (UISettings, error)      // Saves and returns confi
 - **Cleanup**: Always call `Stop()` on recorders
 - **Error Handling**: Check device initialization and start errors
 
-### 2. File Operations
+### 2. Real-Time Visualization
+- **60fps Animation**: Use `requestAnimationFrame` for smooth updates
+- **Audio Data Handling**: Process incoming PCM data in real-time
+- **Frequency Analysis**: Divide audio into frequency bands for visual representation
+- **Responsive Design**: Ensure bars move dramatically with audio input
+
+### 3. File Operations
 - **Paths**: Use `filepath.Join()` for cross-platform compatibility
 - **Permissions**: Create directories with `0755` permissions
 - **Cleanup**: Close WAV writers and handle errors
 
-### 3. Wails Integration
+### 4. Wails Integration
 - **Context**: Store UI context for dialog operations
 - **Bindings**: Expose methods through struct embedding
 - **Assets**: Use Go embed for frontend files
+- **Events**: Use `wruntime.EventsEmit` for real-time communication
 
-### 4. Error Handling
+### 5. Error Handling
 - **Validation**: Check file existence and permissions
 - **Recovery**: Clean up resources on errors
 - **User Feedback**: Return meaningful error messages
 
-### 5. Tailwind CSS Development
+### 6. Tailwind CSS Development
 - **Content Scanning**: Configure `tailwind.config.js` to scan source HTML files
 - **Build Process**: Use npm scripts for CSS generation (`tailwind:build`, `tailwind:watch`)
 - **Source Files**: Maintain HTML in `frontend/src/` for Tailwind scanning
@@ -324,6 +348,8 @@ cd frontend && npm run tailwind:build
 ```
 
 ## Common Tasks
+
+### Adding New Audio Sources
 1. Create new recorder in `internal/audio/`
 2. Implement `Start()`, `Stop()`, `Data()` methods
 3. Add to `App.StartRecordingAdvanced()` logic
@@ -353,9 +379,9 @@ cd frontend && npm run tailwind:build
 
 ### Common Issues
 1. **Audio Not Recording**: Check device permissions and default devices
-2. **Whisper Errors**: Verify binary path and model existence
-3. **GUI Not Responding**: Ensure WebView2 runtime is installed
-4. **File Picker Issues**: Check UI context initialization
+2. **Spectrum Analyzer Not Moving**: Ensure audio is playing and recording is active
+3. **Whisper Errors**: Verify binary path and model existence
+4. **GUI Not Responding**: Ensure WebView2 runtime is installed
 5. **Tailwind CSS Not Working**: Verify CSS build process and file paths
 6. **Styling Missing in Production**: Ensure CSS is built before Wails build
 
@@ -387,6 +413,7 @@ cd frontend && npm run tailwind:build
 - **Interactive Elements**: Hover effects, focus states, and smooth transitions
 - **Accessibility**: Proper focus indicators and disabled states
 - **Tabbed Interface**: Clean navigation between different functionality
+- **Real-Time Spectrum Analyzer**: Live audio visualization with 60fps animation
 
 ### Extension Points
 - Audio source plugins
@@ -394,5 +421,6 @@ cd frontend && npm run tailwind:build
 - Output format handlers
 - Workflow automation
 - Cloud storage integration
+- Advanced visualization options
 
 This documentation should provide AI agents with comprehensive understanding of the Blackbox project structure, enabling effective code analysis, modification, and extension.

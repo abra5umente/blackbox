@@ -1,251 +1,175 @@
 # Blackbox
 
-Windows-only audio capture and transcription tool with both CLI and a Wails-based GUI. It records system audio (WASAPI loopback) and/or microphone to WAV, transcribes with whisper.cpp, and includes a summariser stub. Features a modern, responsive UI built with Tailwind CSS.
+A Windows-only audio capture and transcription tool with both CLI and Wails-based GUI interfaces. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides a foundation for future summarization features.
 
-## Layout
+## Features
 
-- `main.go` — Wails GUI entrypoint; embeds `frontend/dist` and binds `internal/ui.App`
-- `cmd/gui/` — alternative GUI entry (not required to build)
-- `frontend/` — static frontend assets with Tailwind CSS styling
-- `internal/ui/` — GUI backend: settings, recording/transcribe/summarise APIs
-- `cmd/rec/` — record desktop audio to WAV (CLI)
-- `cmd/transcribe/` — run whisper.cpp on a WAV and produce `.txt` (CLI)
-- `cmd/summarise/` — summariser stub (CLI)
-- `internal/audio/` — WASAPI loopback + microphone capture via `malgo`
-- `internal/wav/` — WAV writer that fixes headers on `Close`
-- `internal/execx/` — wrapper to run whisper binary and capture logs
-- `wails.json` — Wails build/runtime configuration
-- `models/` — whisper ggml models (e.g., `ggml-base.en.bin`)
-- `whisper-bin/` — whisper.cpp Windows binaries (e.g., `whisper-cli.exe`)
-- `out/` — default output directory for WAV/TXT
-- `configs/` — sample config for summariser
+- **Real-time Audio Capture**: WASAPI loopback for system audio + optional microphone input
+- **Live Spectrum Analyzer**: Beautiful real-time visualization of audio activity in the GUI
+- **High-Quality Transcription**: whisper.cpp integration with multiple model support
+- **Modern GUI**: Clean, responsive Wails-based interface with Tailwind CSS styling
+- **CLI Tools**: Command-line utilities for automation and scripting
+- **Audio Mixing**: Intelligent mixing of system and microphone audio
+- **Flexible Output**: Configurable output directories and file naming
 
-## Frontend & Styling
+## Screenshots
 
-The GUI frontend is built with modern web technologies and styled using Tailwind CSS:
+The GUI features a modern dark theme with:
+- **Record Tab**: Audio capture with real-time spectrum analyzer visualization
+- **Transcribe Tab**: WAV file selection and transcription processing
+- **Record & Transcribe & Summarise Tab**: Combined workflow with live audio feedback
+- **Summarise Tab**: Transcript processing and AI-powered summarization
+- **Settings Tab**: Configuration management
 
-- **Tailwind CSS v3.4.17**: Utility-first CSS framework for rapid UI development
-- **Modern Dark Theme**: Professional dark interface with blue accents
-- **Responsive Design**: Clean layout with proper spacing and typography
-- **Interactive Elements**: Hover effects, focus states, and smooth transitions
+## Quick Start
 
-### Tailwind CSS Setup
-
-The project includes a complete Tailwind CSS build pipeline:
-
-- **Configuration**: `frontend/tailwind.config.js` - scans all HTML/JS files for classes
-- **Input CSS**: `frontend/src/input.css` - contains Tailwind directives
-- **Build Scripts**: 
-  - `npm run tailwind:build` - one-time CSS build
-  - `npm run tailwind:watch` - watch mode for development
-- **Wails Integration**: `wails.json` configured with `frontend:dev:watcher` for automatic CSS rebuilding during development
-- **Output**: `frontend/dist/output.css` - compiled CSS with only used utility classes
-
-### Development Workflow
-
+### GUI (Recommended)
 ```bash
-# From project root
-wails dev                    # Runs Wails dev server + Tailwind watcher
-
-# From frontend directory
-npm run tailwind:build      # Build CSS once
-npm run tailwind:watch      # Watch for changes
-```
-
-### Package.json Scripts
-
-The `frontend/package.json` includes these Tailwind-related scripts:
-
-- **`tailwind:build`**: Builds CSS once with all detected utility classes
-- **`tailwind:watch`**: Watches for changes and rebuilds CSS automatically
-- **Dependencies**: `tailwindcss@^3.4.0`, `postcss`, `autoprefixer`
-
-The project root `package.json` includes these build scripts:
-
-- **`build:css`**: Builds Tailwind CSS for production
-- **`build:gui`**: Builds Tailwind CSS and then builds the Wails GUI
-- **`dev`**: Runs Wails development server
-
-## Requirements
-
-- Windows 11
-- Go 1.24+
-- Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`) for GUI builds
-- Microsoft WebView2 Runtime (usually present on Windows 11). If missing, install from the official site.
-- `whisper.cpp` binaries placed in `./whisper-bin/` (e.g., `whisper-cli.exe` or `main.exe`)
-- whisper model in `./models/` (e.g., `ggml-base.en.bin`)
-- Node.js and npm (for Tailwind CSS build process)
-
-## Binaries
-
-- GUI: `build/bin/blackbox-gui.exe` (built via Wails)
-- CLI: `cmd/rec/rec.exe`, `cmd/transcribe/transcribe.exe`, `cmd/summarise/summarise.exe`
-
-## GUI Quickstart
-
-```powershell
-# Build the GUI with Tailwind CSS
+# Build and run the GUI
 npm run build:gui
-
-# Or manually:
-npm run build:css && wails build -clean
-
-# Run it
-./build/bin/blackbox-gui.exe
+.\build\bin\blackbox-gui.exe
 ```
 
-## GUI Usage
-
-- Record tab
-  - Start/Stop recording to `OutDir`.
-  - Use Microphone: mixes default mic with system audio.
-  - Dictation mode (mic only): records only the microphone (use this if there’s no system/meeting audio).
-- Transcribe tab
-  - Choose WAV: opens a file picker rooted at `OutDir` filtered to `*.wav`.
-  - Transcribe: runs whisper.cpp and writes `out/<base>.txt` and `out/<base>.log`.
-- Summarise tab (stub)
-  - Choose TXT: opens a file picker rooted at `OutDir` filtered to `*.txt`.
-  - Summarise: reads `configs/llm.json` and prints the intended Chat Completions request.
-- Record & Transcribe & Summarise tab
-  - Begin: starts recording (honours Use Microphone / Dictation mode).
-  - Stop Recording: finalises WAV, transcribes it, then runs the summariser stub on the produced `.txt`.
-- Settings tab
-  - Output Directory: set and save the output folder. Persisted at `./config/ui.json`. All flows honour this.
-
-### UI Features
-
-- **Modern Dark Theme**: Professional appearance with proper contrast
-- **Responsive Layout**: Clean spacing and typography using Tailwind utilities
-- **Interactive Elements**: Hover effects, focus states, and smooth transitions
-- **Accessibility**: Proper focus indicators and disabled states
-
-Notes
-
-- The GUI resolves `whisper` binary and model using the current working directory (where you launch the `.exe`).
-  - Binary default: `./whisper-bin/whisper-cli.exe`, fallback `./whisper-bin/main.exe`.
-  - Model default: `./models/ggml-base.en.bin`.
-  - You can override via environment variables below.
-
-## Quickstart
-
-```powershell
-# 1) Record ~3 seconds of system audio (CLI)
+### CLI Tools
+```bash
+# Build all CLI tools
 go build ./...
-./cmd/rec/rec.exe --dur 3s
 
-# The WAV path is printed, e.g. .\out\20250829_101530.wav
+# Record system audio
+./cmd/rec/rec.exe --dur 30 --with-mic
 
-# 2) Transcribe the WAV
-./cmd/transcribe/transcribe.exe --wav .\out\20250829_101530.wav --model .\models\ggml-base.en.bin
+# Transcribe WAV file
+./cmd/transcribe/transcribe.exe --wav ./out/audio.wav
 
-# The transcript path is printed, e.g. .\out\20250829_101530.txt
+# Summarize transcript
+./cmd/summarise/summarise.exe --txt ./out/audio.txt
 ```
 
-## Development
+## Architecture
 
-### Building the GUI
-
-```bash
-# Build production GUI with Tailwind CSS
-npm run build:gui
-
-# Or manually:
-npm run build:css && wails build -clean
-
-# Development mode with Tailwind CSS watching
-wails dev
-```
-
-### Tailwind CSS Development
-
-```bash
-# From frontend directory
-cd frontend
-
-# Install dependencies (first time only)
-npm install
-
-# Build CSS once
-npm run tailwind:build
-
-# Watch for changes during development
-npm run tailwind:watch
-```
-
-The `wails dev` command automatically runs the Tailwind watcher, so CSS rebuilds happen automatically during development.
-
-### Production Build Process
-
-For production builds, the process ensures Tailwind CSS is properly included:
-
-1. **CSS Build**: `npm run build:css` generates `frontend/dist/output.css` with all used utility classes
-2. **Wails Build**: `wails build -clean` embeds the frontend assets (including CSS) into the executable
-3. **Result**: The final `blackbox-gui.exe` includes all Tailwind CSS styling
-
-**Note**: Always run `npm run build:css` before `wails build` to ensure the latest CSS is included, or use `npm run build:gui` which does both steps automatically.
-
-## Environment overrides
-
-- `LOOPBACK_NOTES_MODELS` — directory containing models (defaults to `./models`)
-- `LOOPBACK_NOTES_WHISPER_BIN` — path to whisper executable (defaults to `./whisper-bin/whisper-cli.exe`, falls back to `./whisper-bin/main.exe`)
-- `LOOPBACK_NOTES_OUT` — output directory (defaults to `./out`)
-
-## rec usage
-
-```powershell
-./cmd/rec/rec.exe --dur 5m                      # record for 5 minutes
-./cmd/rec/rec.exe --stop-key ctrl+shift+9       # stop on hotkey
-
-# Flags
-  --out-dir      "./out"
-  --sample-rate  16000    # 16kHz recommended for speech recognition
-  --bits         16
-  --channels     1        # Mono recommended for speech (cuts file size in half)
-  --device       ""       # optional device name/id (default render device is used)
-  --dur          0        # duration (0 = manual stop)
-  --stop-key     ""       # e.g. "ctrl+shift+9"
-```
-
-## transcribe usage
-
-```powershell
-./cmd/transcribe/transcribe.exe --wav .\out\20250829_101530.wav \
-  --model .\models\ggml-base.en.bin \
-  --lang en \
-  --threads 4 \
-  --out-dir .\out \
-  --extra-args "-pp -su"
-```
-
-## summarise (stub)
-
-```powershell
-./cmd/summarise/summarise.exe --txt .\out\20250829_101530.txt
-```
-
-Reads `./configs/llm.json` with fields:
-
-```json
-{
-  "base_url": "https://api.openai.com/v1",
-  "api_key_env": "OPENAI_API_KEY",
-  "model": "gpt-4o-mini"
-}
-```
-
-No network request is sent in this pass; it only validates config and prints what it would call.
-
-## Notes
-
-- WAV writer fixes RIFF sizes on `Close` and writes PCM S16LE frames.
-- Logs from whisper are saved next to the transcript: `out/<base>.log`.
-- Non-zero exit codes on capture/exec/missing binary or model.
+- **Backend**: Go 1.24+ with WASAPI audio capture
+- **GUI Framework**: Wails v2 (Go + WebView2)
+- **Audio Processing**: malgo for WASAPI loopback and capture
+- **Transcription**: whisper.cpp integration
+- **Frontend**: Vanilla HTML/CSS/JavaScript with Tailwind CSS
+- **Real-time Visualization**: 60fps spectrum analyzer with ultra-sensitive audio response
 
 ## Audio Format
 
 - **Format**: PCM S16LE (16-bit signed little-endian)
-- **Sample Rate**: 16 kHz (optimized for speech recognition)
-- **Channels**: 1 (mono - sufficient for speech and reduces file size)
-- **File Size**: ~1.6-2.0 MB per minute, approximately 100 MB per hour
-- **Quality**: Optimized for transcription while maintaining excellent speech clarity
-- Loopback uses the default render device; microphone uses the default capture device.
+- **Sample Rate**: 48 kHz
+- **Channels**: Stereo (loopback) + Mono (microphone)
+- **Quality**: Optimized for transcription while maintaining excellent audio clarity
+- **File Sizes**: ~1.6-2.0 MB per minute
+
+## Spectrum Analyzer
+
+The GUI includes a **real-time spectrum analyzer** that provides:
+- **Live Audio Visualization**: 32 responsive bars that react to incoming audio
+- **Ultra-Sensitive Response**: Bars move dramatically with even quiet sounds
+- **60fps Animation**: Smooth, professional visualization using `requestAnimationFrame`
+- **Dual Audio Sources**: Visualizes both system audio (WASAPI loopback) and microphone input
+- **Professional Styling**: Lighter grey bars with dynamic color intensity based on audio levels
+
+## Configuration
+
+### Environment Variables
+- `LOOPBACK_NOTES_OUT`: Output directory (default: `./out`)
+- `LOOPBACK_NOTES_MODELS`: Models directory (default: `./models`)
+- `LOOPBACK_NOTES_WHISPER_BIN`: Whisper binary path (default: `./whisper-bin/whisper-cli.exe`)
+
+### Settings File
+```json
+{
+  "out_dir": "./out"
+}
+```
+
+## Build and Development
+
+### Prerequisites
+- Go 1.24+
+- Node.js and npm
+- Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
+
+### Development
+```bash
+# Install dependencies
+npm install
+
+# Build CSS and run development server
+npm run dev
+
+# Build production GUI
+npm run build:gui
+```
+
+### Build Scripts
+- **Windows**: `build.bat` - Batch file for production builds
+- **PowerShell**: `build.ps1` - PowerShell script for production builds
+- **npm**: `npm run build:gui` - Cross-platform build command
+
+## Project Structure
+
+```
+blackbox/
+├── cmd/                    # CLI applications
+│   ├── rec/               # Audio recording CLI
+│   ├── transcribe/        # Transcription CLI
+│   ├── summarise/         # AI-powered summarization CLI
+│   └── gui/               # Alternative GUI entry
+├── internal/               # Core application logic
+│   ├── audio/             # Audio capture (WASAPI loopback + mic)
+│   ├── ui/                # GUI backend services
+│   ├── wav/               # WAV file handling
+│   └── execx/             # External process execution
+├── frontend/               # Static web assets for GUI
+│   ├── src/               # Source HTML for Tailwind scanning
+│   ├── dist/              # Built assets (HTML, CSS, JS)
+│   └── tailwind.config.js # Tailwind CSS configuration
+├── models/                 # Whisper model files
+├── whisper-bin/            # Whisper.cpp executables
+└── configs/                # Configuration files
+```
+
+## Usage Examples
+
+### Recording with Spectrum Analyzer
+1. Open the GUI and go to the **Record** tab
+2. Click **Start Recording** to begin capture
+3. Watch the real-time spectrum analyzer respond to audio activity
+4. The analyzer shows 32 bars that move based on frequency content
+5. Bars change color intensity based on audio levels (grey-600 → grey-400)
+
+### Advanced Recording Modes
+- **Loopback Only**: System audio capture with spectrum visualization
+- **Loopback + Mic**: Mixed audio with dual-source spectrum analysis
+- **Dictation Mode**: Microphone-only with mic-focused visualization
+
+## Troubleshooting
+
+### Common Issues
+1. **Audio Not Recording**: Check device permissions and default audio devices
+2. **Spectrum Analyzer Not Moving**: Ensure audio is playing and recording is active
+3. **Whisper Errors**: Verify binary path and model existence
+4. **GUI Not Responding**: Ensure WebView2 runtime is installed
+
+### Debug Mode
+The spectrum analyzer includes comprehensive error handling and will gracefully fall back to idle animation if audio data is unavailable.
+
+## Future Enhancements
+
+- Device selection for audio sources
+- Advanced audio processing (noise reduction, normalization)
+- Real-time transcription streaming
+- Integration with actual LLM APIs
+- Audio format conversion options
+- Batch processing capabilities
+
+## Contributing
+
+This project uses Go modules and follows standard Go conventions. The frontend uses Tailwind CSS for styling and vanilla JavaScript for functionality.
+
+## License
+
+[Add your license information here]

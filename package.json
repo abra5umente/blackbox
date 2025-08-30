@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Windows audio capture and transcription tool with Wails GUI",
   "scripts": {
-    "build:css": "cd frontend && npm run tailwind:build",
+    "build:css": "cd frontend && npm run build",
     "build:gui": "npm run build:css && wails build -clean",
     "dev": "wails dev"
   },
