@@ -1,0 +1,24 @@
+{
+  "name": "Blackbox GUI",
+  "outputfilename": "blackbox-gui",
+  "author": { "name": "", "email": "" },
+  "frontend": {
+    "dir": "frontend",
+    "install": "",
+    "build": ""
+  },
+  "wailsjsdir": "frontend/wailsjs",
+  "assetdir": "frontend/dist",
+  "obfuscate": false,
+  "info": {
+    "companyName": "",
+    "productName": "Blackbox GUI",
+    "productVersion": "0.1.0"
+  },
+  "windows": {
+    "console": false,
+    "icon": "build/windows/icon.ico"
+  }
+}
+
+
