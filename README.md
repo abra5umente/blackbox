@@ -5,11 +5,11 @@ A Windows-only audio capture and transcription tool with both CLI and Wails-base
 ## Features
 
 - **Real-time Audio Capture**: WASAPI loopback for system audio + optional microphone input
-- **Live Spectrum Analyzer**: Beautiful real-time visualization of audio activity in the GUI
+- **Live Spectrum Analyzer**: Real-time visualization of audio activity in the GUI
 - **High-Quality Transcription**: whisper.cpp integration with multiple model support
 - **Modern GUI**: Clean, responsive Wails-based interface with Tailwind CSS styling
 - **CLI Tools**: Command-line utilities for automation and scripting
-- **Audio Mixing**: Intelligent mixing of system and microphone audio
+- **Audio Mixing**: User-selectable combinations of system and microphone audio
 - **Flexible Output**: Configurable output directories and file naming
 
 ## Screenshots
@@ -26,8 +26,9 @@ The GUI features a modern dark theme with:
 ### GUI (Recommended)
 ```bash
 # Build and run the GUI
-npm run build:gui
-.\build\bin\blackbox-gui.exe
+wails build
+cp .\build\bin\blackbox-gui.exe .\blackbox-gui.exe
+.\blackbox-gui.exe
 ```
 
 ### CLI Tools
@@ -36,13 +37,13 @@ npm run build:gui
 go build ./...
 
 # Record system audio
-./cmd/rec/rec.exe --dur 30 --with-mic
+.\cmd\rec\rec.exe --dur 30 --with-mic
 
 # Transcribe WAV file
-./cmd/transcribe/transcribe.exe --wav ./out/audio.wav
+.\cmd\transcribe\transcribe.exe --wav .\out\audio.wav
 
 # Summarize transcript
-./cmd/summarise/summarise.exe --txt ./out/audio.txt
+.\cmd\summarise\summarise.exe --txt .\out\audio.txt
 ```
 
 ## Architecture
@@ -78,10 +79,21 @@ The GUI includes a **real-time spectrum analyzer** that provides:
 - `LOOPBACK_NOTES_MODELS`: Models directory (default: `./models`)
 - `LOOPBACK_NOTES_WHISPER_BIN`: Whisper binary path (default: `./whisper-bin/whisper-cli.exe`)
 
-### Settings File
+### Configuration Files
+
+**GUI Settings** (`./config/ui.json` - auto-created):
 ```json
 {
   "out_dir": "./out"
+}
+```
+
+**Application Config** (`./configs/llm.json`):
+```json
+{
+  "base_url": "https://api.openai.com/v1",
+  "api_key_env": "OPENAI_API_KEY",
+  "model": "gpt-4o-mini"
 }
 ```
 
@@ -104,20 +116,20 @@ npm run dev
 npm run build:gui
 ```
 
-### Build Scripts
-- **Windows**: `build.bat` - Batch file for production builds
-- **PowerShell**: `build.ps1` - PowerShell script for production builds
-- **npm**: `npm run build:gui` - Cross-platform build command
+### Build Commands
+- **npm**: `npm run build:gui` - Cross-platform build command (recommended)
+- **Manual**: `npm run build:css && wails build -clean` - Manual build process
 
 ## Project Structure
 
 ```
 blackbox/
+├── main.go                 # Wails GUI entrypoint
 ├── cmd/                    # CLI applications
 │   ├── rec/               # Audio recording CLI
 │   ├── transcribe/        # Transcription CLI
 │   ├── summarise/         # AI-powered summarization CLI
-│   └── gui/               # Alternative GUI entry
+│   └── gui/               # Alternative GUI entry (unused)
 ├── internal/               # Core application logic
 │   ├── audio/             # Audio capture (WASAPI loopback + mic)
 │   ├── ui/                # GUI backend services
@@ -126,10 +138,13 @@ blackbox/
 ├── frontend/               # Static web assets for GUI
 │   ├── src/               # Source HTML for Tailwind scanning
 │   ├── dist/              # Built assets (HTML, CSS, JS)
+│   ├── wailsjs/           # Wails-generated bindings
 │   └── tailwind.config.js # Tailwind CSS configuration
 ├── models/                 # Whisper model files
 ├── whisper-bin/            # Whisper.cpp executables
-└── configs/                # Configuration files
+├── configs/                # Application configuration files
+├── config/                 # GUI settings (auto-created)
+└── out/                    # Output directory (audio files, transcripts)
 ```
 
 ## Usage Examples

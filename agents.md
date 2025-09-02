@@ -16,7 +16,7 @@ blackbox/
 │   ├── rec/               # Audio recording CLI
 │   ├── transcribe/        # Transcription CLI
 │   ├── summarise/         # AI-powered summarization CLI
-│   └── gui/               # Alternative GUI entry
+│   └── gui/               # Alternative GUI entry (unused)
 ├── internal/               # Core application logic
 │   ├── audio/             # Audio capture (WASAPI loopback + mic)
 │   ├── ui/                # GUI backend services
@@ -25,15 +25,14 @@ blackbox/
 ├── frontend/               # Static web assets for GUI
 │   ├── src/               # Source HTML for Tailwind scanning
 │   ├── dist/              # Built assets (HTML, CSS, JS)
+│   ├── wailsjs/           # Wails-generated bindings
 │   ├── tailwind.config.js # Tailwind CSS configuration
-│   ├── package.json       # Frontend dependencies and scripts
-│   └── wailsjs/           # Wails-generated bindings
+│   └── package.json       # Frontend dependencies and scripts
 ├── models/                 # Whisper model files
 ├── whisper-bin/            # Whisper.cpp executables
-├── configs/                # Configuration files
+├── configs/                # Application configuration files
+├── config/                 # GUI settings (auto-created)
 ├── package.json            # Project build scripts
-├── build.bat               # Windows batch build script
-├── build.ps1               # PowerShell build script
 └── out/                    # Output directory
 ```
 
@@ -328,12 +327,11 @@ The project includes several npm scripts for automated builds:
 - **`npm run build:gui`**: Complete production build (CSS + Wails)
 - **`npm run dev`**: Runs Wails development server
 
-### Build Scripts
+### Build Commands
 Cross-platform build automation:
 
-- **Windows**: `build.bat` - Batch file for production builds
-- **PowerShell**: `build.ps1` - PowerShell script for production builds
-- **npm**: `npm run build:gui` - Cross-platform build command
+- **npm**: `npm run build:gui` - Cross-platform build command (recommended)
+- **Manual**: `npm run build:css && wails build -clean` - Manual build process
 
 ### Tailwind CSS Workflow
 ```bash
