@@ -34,7 +34,7 @@ cp .\build\bin\blackbox-gui.exe .\blackbox-gui.exe
 ### CLI Tools
 ```bash
 # Build all CLI tools
-go build ./...
+go build .\...
 
 # Record system audio
 .\cmd\rec\rec.exe --dur 30 --with-mic
@@ -46,31 +46,13 @@ go build ./...
 .\cmd\summarise\summarise.exe --txt .\out\audio.txt
 ```
 
-## Architecture
-
-- **Backend**: Go 1.24+ with WASAPI audio capture
-- **GUI Framework**: Wails v2 (Go + WebView2)
-- **Audio Processing**: malgo for WASAPI loopback and capture
-- **Transcription**: whisper.cpp integration
-- **Frontend**: Vanilla HTML/CSS/JavaScript with Tailwind CSS
-- **Real-time Visualization**: 60fps spectrum analyzer with ultra-sensitive audio response
-
 ## Audio Format
 
 - **Format**: PCM S16LE (16-bit signed little-endian)
-- **Sample Rate**: 48 kHz
+- **Sample Rate**: 16 kHz
 - **Channels**: Stereo (loopback) + Mono (microphone)
 - **Quality**: Optimized for transcription while maintaining excellent audio clarity
 - **File Sizes**: ~1.6-2.0 MB per minute
-
-## Spectrum Analyzer
-
-The GUI includes a **real-time spectrum analyzer** that provides:
-- **Live Audio Visualization**: 32 responsive bars that react to incoming audio
-- **Ultra-Sensitive Response**: Bars move dramatically with even quiet sounds
-- **60fps Animation**: Smooth, professional visualization using `requestAnimationFrame`
-- **Dual Audio Sources**: Visualizes both system audio (WASAPI loopback) and microphone input
-- **Professional Styling**: Lighter grey bars with dynamic color intensity based on audio levels
 
 ## Configuration
 
@@ -93,7 +75,7 @@ The GUI includes a **real-time spectrum analyzer** that provides:
 {
   "base_url": "https://api.openai.com/v1",
   "api_key_env": "OPENAI_API_KEY",
-  "model": "gpt-4o-mini"
+  "model": "gpt-5-mini"
 }
 ```
 
@@ -109,52 +91,29 @@ The GUI includes a **real-time spectrum analyzer** that provides:
 # Install dependencies
 npm install
 
-# Build CSS and run development server
-npm run dev
+# Run development server (standard Wails command)
+wails dev
 
-# Build production GUI
-npm run build:gui
+# Build production GUI (standard Wails command)
+wails build
 ```
 
 ### Build Commands
-- **npm**: `npm run build:gui` - Cross-platform build command (recommended)
-- **Manual**: `npm run build:css && wails build -clean` - Manual build process
-
-## Project Structure
-
-```
-blackbox/
-├── main.go                 # Wails GUI entrypoint
-├── cmd/                    # CLI applications
-│   ├── rec/               # Audio recording CLI
-│   ├── transcribe/        # Transcription CLI
-│   ├── summarise/         # AI-powered summarization CLI
-│   └── gui/               # Alternative GUI entry (unused)
-├── internal/               # Core application logic
-│   ├── audio/             # Audio capture (WASAPI loopback + mic)
-│   ├── ui/                # GUI backend services
-│   ├── wav/               # WAV file handling
-│   └── execx/             # External process execution
-├── frontend/               # Static web assets for GUI
-│   ├── src/               # Source HTML for Tailwind scanning
-│   ├── dist/              # Built assets (HTML, CSS, JS)
-│   ├── wailsjs/           # Wails-generated bindings
-│   └── tailwind.config.js # Tailwind CSS configuration
-├── models/                 # Whisper model files
-├── whisper-bin/            # Whisper.cpp executables
-├── configs/                # Application configuration files
-├── config/                 # GUI settings (auto-created)
-└── out/                    # Output directory (audio files, transcripts)
+- **Standard Wails**: `wails build` - Direct Wails build command (recommended)
+- **With CSS build**: `npm run build:css && wails build -clean` - Manual build with CSS
+- **npm wrapper**: `npm run build:gui` - Custom npm script that wraps Wails commands
 ```
 
 ## Usage Examples
 
-### Recording with Spectrum Analyzer
-1. Open the GUI and go to the **Record** tab
-2. Click **Start Recording** to begin capture
-3. Watch the real-time spectrum analyzer respond to audio activity
-4. The analyzer shows 32 bars that move based on frequency content
-5. Bars change color intensity based on audio levels (grey-600 → grey-400)
+### Recording with automatic summary
+1. Open Blackbox
+2. Click on "Record & Transcribe & Summarise
+3. Select which mode you want to record in (desktop only (untick Use Microphone), desktop + microphone, or microphone only (dictation mode))
+4. Begin your meeting/dictation
+5. Once done, clikc "Stop Recording."
+6. The application will automatically transcribe + summarise your recording.
+7. The recording is then deleted - all you are left with is the transcript and the summary.
 
 ### Advanced Recording Modes
 - **Loopback Only**: System audio capture with spectrum visualization
@@ -165,26 +124,22 @@ blackbox/
 
 ### Common Issues
 1. **Audio Not Recording**: Check device permissions and default audio devices
-2. **Spectrum Analyzer Not Moving**: Ensure audio is playing and recording is active
-3. **Whisper Errors**: Verify binary path and model existence
+2. **Spectrum Analyzer Not Moving**: Ensure audio is playing and recording is active, ensure you are using the correct audio interface in Windows settings
+3. **Whisper Errors**: Verify binary path and model existence, refer to whisper-cli GH
 4. **GUI Not Responding**: Ensure WebView2 runtime is installed
-
-### Debug Mode
-The spectrum analyzer includes comprehensive error handling and will gracefully fall back to idle animation if audio data is unavailable.
 
 ## Future Enhancements
 
 - Device selection for audio sources
 - Advanced audio processing (noise reduction, normalization)
-- Real-time transcription streaming
-- Integration with actual LLM APIs
-- Audio format conversion options
-- Batch processing capabilities
+- Take notes and use them in the summary automatically with timestamping
+- Integration with other LLM APIs
+- Different summarisation styles (casual, meeting, standup, dictation)
 
 ## Contributing
 
-This project uses Go modules and follows standard Go conventions. The frontend uses Tailwind CSS for styling and vanilla JavaScript for functionality.
+See DEVELOPER.md
 
 ## License
 
-[Add your license information here]
+See LICENSE.md
