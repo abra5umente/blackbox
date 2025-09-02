@@ -196,12 +196,15 @@ func (a *App) Summarise(txtPath string) (string, error) {
 	}
 
 	// Create the summarization prompt
-	prompt := `You are an expert summarization specialist. Your task is to create a clear, concise summary of the provided transcript. Focus on:
+	prompt := `You are an expert summarization specialist. Be accurate, concise, and non-speculative. Never invent facts, names, or commitments. If something is unclear, say "Unknown". Prefer bullet points over prose.
+	
+	Your task is to create a clear, concise summary of the provided transcript. Focus on:
 
 1. Key points and main ideas
 2. Important details and context
 3. Any action items or decisions mentioned
 4. Overall tone and sentiment
+5. Key quotes (less than 3, exact quotes)
 
 Please provide a well-structured summary that captures the essence of the conversation while maintaining clarity and readability.`
 
