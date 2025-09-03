@@ -85,6 +85,7 @@ go build .\...
 - Go 1.24+
 - Node.js and npm
 - Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
+- [whisper-cli](https://github.com/ggml-org/whisper.cpp) built files extracted to ./whisper-cli
 
 ### Development
 ```bash
@@ -125,7 +126,7 @@ wails build
 ### Common Issues
 1. **Audio Not Recording**: Check device permissions and default audio devices
 2. **Spectrum Analyzer Not Moving**: Ensure audio is playing and recording is active, ensure you are using the correct audio interface in Windows settings
-3. **Whisper Errors**: Verify binary path and model existence, refer to whisper-cli GH
+3. **Whisper Errors**: Verify binary path and model existence, refer to [whisper-cli](https://github.com/ggml-org/whisper.cpp)
 4. **GUI Not Responding**: Ensure WebView2 runtime is installed
 
 ## Future Enhancements
