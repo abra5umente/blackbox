@@ -21,8 +21,7 @@ blackbox/
 ├── cmd/                    # CLI applications
 │   ├── rec/               # Audio recording CLI
 │   ├── transcribe/        # Transcription CLI
-│   ├── summarise/         # AI-powered summarization CLI
-│   └── gui/               # Alternative GUI entry (unused)
+│   └── summarise/         # AI-powered summarization CLI
 ├── internal/               # Core application logic
 │   ├── audio/             # Audio capture (WASAPI loopback + mic)
 │   ├── ui/                # GUI backend services
