@@ -12,7 +12,6 @@ A Windows-only meeting & dictation recorder, featuring local transcription, and 
 - **High-Quality Transcription**: whisper.cpp integration with multiple model support
 - **Summarisation**: Use any OpenAI compatible API endpoint (instructions included for local [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master) usage)
 - **Modern GUI**: Clean, responsive Wails-based interface with Tailwind CSS styling
-
 - **Audio Mixing**: User-selectable combinations of system and microphone audio
 - **Flexible Output**: Configurable output directories and file naming
 
@@ -25,7 +24,7 @@ The GUI exposes the following functions:
 
 ## Quick Start
 
-### GUI (Recommended)
+### Build and run the GUI
 ```bash
 # Build and run the GUI
 wails build
@@ -44,11 +43,6 @@ cp .\build\bin\blackbox-gui.exe .\blackbox-gui.exe
 - **File Sizes**: ~1.6-2.0 MB per minute
 
 ## Configuration
-
-### Environment Variables
-- `LOOPBACK_NOTES_OUT`: Output directory (default: `./out`)
-- `LOOPBACK_NOTES_MODELS`: Models directory (default: `./models`)
-- `LOOPBACK_NOTES_WHISPER_BIN`: Whisper binary path (default: `./whisper-bin/whisper-cli.exe`)
 
 ### Configuration Files
 
@@ -112,7 +106,7 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 ```
 
 2. **Supported services**:
-   - OpenAI (GPT-4, GPT-3.5)
+   - OpenAI (GPT-5, GPT-4)
    - Anthropic Claude (via OpenAI-compatible proxy)
    - Local servers (Ollama, LM Studio, etc.)
    - Any OpenAI-compatible API
