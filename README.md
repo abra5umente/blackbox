@@ -2,6 +2,9 @@
 
 A Windows-only audio capture and transcription tool with both CLI and Wails-based GUI interfaces. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides a foundation for future summarization features.
 
+<img width="1002" height="708" alt="image" src="https://github.com/user-attachments/assets/2e155ac5-025f-4301-8185-b97f1b0ebc5a" />  
+
+
 ## Features
 
 - **Real-time Audio Capture**: WASAPI loopback for system audio + optional microphone input
@@ -11,8 +14,6 @@ A Windows-only audio capture and transcription tool with both CLI and Wails-base
 - **CLI Tools**: Command-line utilities for automation and scripting
 - **Audio Mixing**: User-selectable combinations of system and microphone audio
 - **Flexible Output**: Configurable output directories and file naming
-
-## Screenshots
 
 The GUI exposes the following functions:
 - **Record Tab**: Audio capture with real-time spectrum analyzer visualization
