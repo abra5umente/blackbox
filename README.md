@@ -86,7 +86,7 @@ go build .\...
 - Go 1.24+
 - Node.js and npm
 - Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
-- [whisper-cli](https://github.com/ggml-org/whisper.cpp) built files extracted to .\whisper-cli
+- [whisper-cli](https://github.com/ggml-org/whisper.cpp) built files extracted to .\whisper-bin
 
 ### Development
 ```bash
@@ -112,7 +112,7 @@ wails build
 2. Click on "Record & Transcribe & Summarise
 3. Select which mode you want to record in (desktop only (untick Use Microphone), desktop + microphone, or microphone only (dictation mode))
 4. Begin your meeting/dictation
-5. Once done, clikc "Stop Recording."
+5. Once done, click "Stop Recording."
 6. The application will automatically transcribe + summarise your recording.
 7. The recording is then deleted - all you are left with is the transcript and the summary.
 
