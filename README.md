@@ -1,6 +1,6 @@
 # Blackbox
 
-A Windows-only audio capture and transcription tool with both CLI and Wails-based GUI interfaces. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides a foundation for future summarization features.
+A Windows-only meeting & dictation recorder, featuring local transcription, and automatic summarisation.
 
 <img width="1002" height="708" alt="image" src="https://github.com/user-attachments/assets/2e155ac5-025f-4301-8185-b97f1b0ebc5a" />  
 
