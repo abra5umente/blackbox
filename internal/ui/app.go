@@ -9,9 +9,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"blackbox/internal/audio"
@@ -36,6 +38,10 @@ type App struct {
 	cancel      context.CancelFunc
 	flushTicker *time.Ticker
 	wavPath     string
+
+	// Llama server management
+	llamaServer *exec.Cmd
+	llamaMu     sync.Mutex
 
 	uiCtx context.Context
 }
@@ -172,7 +178,7 @@ func (a *App) Transcribe(wavPath string) (string, error) {
 	return txtPath, nil
 }
 
-// Summarise reads configs/llm.json and sends the transcript to OpenAI for summarization.
+// Summarise reads configs/llm.json and sends the transcript to OpenAI or local AI for summarization.
 func (a *App) Summarise(txtPath string) (string, error) {
 	if strings.TrimSpace(txtPath) == "" {
 		return "", errors.New("txt path required")
@@ -180,14 +186,8 @@ func (a *App) Summarise(txtPath string) (string, error) {
 	if _, err := os.Stat(txtPath); err != nil {
 		return "", err
 	}
-	cfg, err := a.loadLLMConfig("./configs/llm.json")
-	if err != nil {
-		return "", err
-	}
 
-	if cfg.APIKey == "" {
-		return "", fmt.Errorf("api_key is required in config")
-	}
+	uiCfg := a.settings.Get()
 
 	// Read the transcript file
 	transcript, err := os.ReadFile(txtPath)
@@ -208,26 +208,46 @@ func (a *App) Summarise(txtPath string) (string, error) {
 
 Please provide a well-structured summary that captures the essence of the conversation while maintaining clarity and readability.`
 
-	// Prepare the chat request
-	request := chatRequest{
-		Model: cfg.Model,
-		Messages: []chatMessage{
-			{
-				Role:    "system",
-				Content: prompt,
-			},
-			{
-				Role:    "user",
-				Content: string(transcript),
-			},
-		},
-		MaxTokens: 2000,
-	}
+	var summary string
 
-	// Make the API request
-	summary, err := a.makeOpenAIRequest(cfg.BaseURL, cfg.APIKey, request)
-	if err != nil {
-		return "", fmt.Errorf("API request failed: %w", err)
+	if uiCfg.UseLocalAI {
+		// Use local AI (llama.cpp) - load from local.json
+		summary, err = a.summariseWithLocalAI(string(transcript), prompt)
+		if err != nil {
+			return "", fmt.Errorf("local AI summarization failed: %w", err)
+		}
+	} else {
+		// Use remote AI - load from remote.json
+		cfg, err := a.loadLLMConfig("./configs/remote.json")
+		if err != nil {
+			return "", err
+		}
+
+		if cfg.APIKey == "" {
+			return "", fmt.Errorf("api_key is required in remote config")
+		}
+
+		// Prepare the chat request
+		request := chatRequest{
+			Model: cfg.Model,
+			Messages: []chatMessage{
+				{
+					Role:    "system",
+					Content: prompt,
+				},
+				{
+					Role:    "user",
+					Content: string(transcript),
+				},
+			},
+			MaxTokens: 2000,
+		}
+
+		// Make the API request
+		summary, err = a.makeOpenAIRequest(cfg.BaseURL, cfg.APIKey, request)
+		if err != nil {
+			return "", fmt.Errorf("API request failed: %w", err)
+		}
 	}
 
 	// Write summary to output file
@@ -237,6 +257,51 @@ Please provide a well-structured summary that captures the essence of the conver
 	}
 
 	return fmt.Sprintf("Summary written to: %s\n\n--- Summary ---\n%s", outputPath, summary), nil
+}
+
+// summariseWithLocalAI uses the local llama-server for summarization
+func (a *App) summariseWithLocalAI(transcript, prompt string) (string, error) {
+	// Ensure llama-server is running
+	if !a.isLlamaServerRunning() {
+		if err := a.startLlamaServer(); err != nil {
+			return "", fmt.Errorf("failed to start llama-server: %w", err)
+		}
+	}
+
+	// Load API key from local.json for client authentication
+	cfg, err := a.loadLLMConfig("./configs/local.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to load local config: %w", err)
+	}
+
+	// Prepare the chat request for local AI
+	request := chatRequest{
+		Model: "local", // Model name doesn't matter for local AI
+		Messages: []chatMessage{
+			{
+				Role:    "system",
+				Content: prompt,
+			},
+			{
+				Role:    "user",
+				Content: transcript,
+			},
+		},
+		MaxTokens: 2000,
+	}
+
+	// Make the request to local llama-server using API key from local.json
+	summary, err := a.makeOpenAIRequest("http://127.0.0.1:8080", cfg.APIKey, request)
+	if err != nil {
+		// Shutdown server on error
+		a.stopLlamaServer()
+		return "", fmt.Errorf("local AI request failed: %w", err)
+	}
+
+	// Shutdown llama-server after successful summarization
+	a.stopLlamaServer()
+
+	return summary, nil
 }
 
 // Helper: load LLM config shared with CLI semantics
@@ -289,7 +354,7 @@ func (a *App) makeOpenAIRequest(baseURL, apiKey string, request chatRequest) (st
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	// Make the request
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 360 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
@@ -576,4 +641,152 @@ func (a *App) PickTxtFromOutDir() (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// PickModelFile opens a file picker for selecting llama model files
+func (a *App) PickModelFile() (string, error) {
+	if a.uiCtx == nil {
+		return "", errors.New("ui not ready")
+	}
+	path, err := wruntime.OpenFileDialog(a.uiCtx, wruntime.OpenDialogOptions{
+		Title:            "Choose Llama Model",
+		DefaultDirectory: "./models",
+		Filters: []wruntime.FileFilter{
+			{DisplayName: "GGUF Models", Pattern: "*.gguf"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// startLlamaServer starts the llama-server with the configured parameters
+func (a *App) startLlamaServer() error {
+	a.llamaMu.Lock()
+	defer a.llamaMu.Unlock()
+
+	// Stop existing server if running
+	if a.llamaServer != nil {
+		a.stopLlamaServer()
+	}
+
+	cfg := a.settings.Get()
+	if cfg.LlamaModel == "" {
+		return errors.New("no model selected")
+	}
+
+	// Check if model file exists
+	if _, err := os.Stat(cfg.LlamaModel); err != nil {
+		return fmt.Errorf("model file not found: %w", err)
+	}
+
+	// Build llama-server command
+	llamaBin := "./llamacpp-bin/llama-server.exe"
+	if _, err := os.Stat(llamaBin); err != nil {
+		return fmt.Errorf("llama-server.exe not found in llamacpp-bin directory")
+	}
+
+	args := []string{
+		"--model", cfg.LlamaModel,
+		"--host", "127.0.0.1",
+		"--port", "8080",
+		"--ctx-size", fmt.Sprintf("%d", cfg.LlamaContext),
+		"--temp", fmt.Sprintf("%.2f", cfg.LlamaTemp),
+		"--api-key", cfg.LlamaAPIKey,
+	}
+
+	cmd := exec.Command(llamaBin, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Hide CMD window on Windows
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow: true,
+	}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start llama-server: %w", err)
+	}
+
+	a.llamaServer = cmd
+
+	// Wait for server to be ready
+	return a.waitForLlamaServer()
+}
+
+// stopLlamaServer stops the running llama-server
+func (a *App) stopLlamaServer() {
+	a.llamaMu.Lock()
+	defer a.llamaMu.Unlock()
+
+	if a.llamaServer != nil {
+		// Try graceful shutdown first
+		if a.llamaServer.Process != nil {
+			a.llamaServer.Process.Kill()
+		}
+		// Wait for process to exit (with timeout)
+		done := make(chan error, 1)
+		go func() {
+			done <- a.llamaServer.Wait()
+		}()
+
+		select {
+		case <-done:
+			// Process exited
+		case <-time.After(5 * time.Second):
+			// Force kill if it doesn't exit gracefully
+			if a.llamaServer.Process != nil {
+				a.llamaServer.Process.Kill()
+			}
+		}
+
+		a.llamaServer = nil
+	}
+}
+
+// waitForLlamaServer waits for the llama-server to be responsive
+func (a *App) waitForLlamaServer() error {
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	for i := 0; i < 30; i++ { // Wait up to 30 seconds
+		resp, err := client.Get("http://127.0.0.1:8080/health")
+		if err == nil && resp.StatusCode == 200 {
+			resp.Body.Close()
+			return nil
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	return errors.New("llama-server failed to start or become responsive")
+}
+
+// isLlamaServerRunning checks if the llama-server is currently running
+func (a *App) isLlamaServerRunning() bool {
+	a.llamaMu.Lock()
+	defer a.llamaMu.Unlock()
+
+	if a.llamaServer == nil {
+		return false
+	}
+
+	// Check if process is still running
+	if a.llamaServer.ProcessState != nil && a.llamaServer.ProcessState.Exited() {
+		a.llamaServer = nil
+		return false
+	}
+
+	// Test if server is responsive
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:8080/health")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode == 200
 }

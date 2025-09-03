@@ -10,6 +10,10 @@ export function IsRecording() {
   return window['go']['ui']['App']['IsRecording']();
 }
 
+export function PickModelFile() {
+  return window['go']['ui']['App']['PickModelFile']();
+}
+
 export function PickTxtFromOutDir() {
   return window['go']['ui']['App']['PickTxtFromOutDir']();
 }

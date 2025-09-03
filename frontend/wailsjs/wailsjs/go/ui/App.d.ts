@@ -7,6 +7,8 @@ export function GetSettings():Promise<ui.UISettings>;
 
 export function IsRecording():Promise<boolean>;
 
+export function PickModelFile():Promise<string>;
+
 export function PickTxtFromOutDir():Promise<string>;
 
 export function PickWavFromOutDir():Promise<string>;

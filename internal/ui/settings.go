@@ -8,10 +8,15 @@ import (
 	"sync"
 )
 
-// UISettings holds configurable UI preferences. Only OutDir is used for now.
+// UISettings holds configurable UI preferences.
 type UISettings struct {
 	OutDir string `json:"out_dir"`
-	// Future fields may be added here. Keep JSON stable.
+	// Local AI settings
+	UseLocalAI   bool    `json:"use_local_ai"`
+	LlamaTemp    float64 `json:"llama_temp"`
+	LlamaContext int     `json:"llama_context"`
+	LlamaModel   string  `json:"llama_model"`
+	LlamaAPIKey  string  `json:"llama_api_key"`
 }
 
 type SettingsStore struct {
@@ -39,7 +44,14 @@ func (s *SettingsStore) load() error {
 	}
 	if _, err := os.Stat(s.path); err != nil {
 		// Default settings
-		s.settings = UISettings{OutDir: "./out"}
+		s.settings = UISettings{
+			OutDir:       "./out",
+			UseLocalAI:   false,
+			LlamaTemp:    0.1,
+			LlamaContext: 32000,
+			LlamaModel:   "",
+			LlamaAPIKey:  "",
+		}
 		// Ensure directory exists for first save
 		_ = os.MkdirAll(filepath.Dir(s.path), 0755)
 		return nil
@@ -55,6 +67,13 @@ func (s *SettingsStore) load() error {
 	if cfg.OutDir == "" {
 		cfg.OutDir = "./out"
 	}
+	// Set defaults for new fields if not present
+	if cfg.LlamaTemp == 0 {
+		cfg.LlamaTemp = 0.1
+	}
+	if cfg.LlamaContext == 0 {
+		cfg.LlamaContext = 32000
+	}
 	s.settings = cfg
 	return nil
 }
@@ -65,6 +84,13 @@ func (s *SettingsStore) Save(newSettings UISettings) error {
 	defer s.mu.Unlock()
 	if newSettings.OutDir == "" {
 		newSettings.OutDir = "./out"
+	}
+	// Set defaults for new fields if not present
+	if newSettings.LlamaTemp == 0 {
+		newSettings.LlamaTemp = 0.1
+	}
+	if newSettings.LlamaContext == 0 {
+		newSettings.LlamaContext = 32000
 	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0755); err != nil {
 		return err
