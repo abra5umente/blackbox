@@ -85,7 +85,7 @@ go build .\...
 - Go 1.24+
 - Node.js and npm
 - Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
-- [whisper-cli](https://github.com/ggml-org/whisper.cpp) built files extracted to ./whisper-cli
+- [whisper-cli](https://github.com/ggml-org/whisper.cpp) built files extracted to .\whisper-cli
 
 ### Development
 ```bash
