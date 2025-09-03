@@ -202,7 +202,7 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 
 ## Contributing
 
-See [DEVELOPER.md](https://github.com/abra5umente/blackbox/blob/main/DEVELOPER.md)
+See [CONTRIBUTING.md](https://github.com/abra5umente/blackbox/blob/main/CONTRIBUTING.md)
 
 ## License
 
