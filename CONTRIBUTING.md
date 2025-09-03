@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Blackbox is a Windows-only audio capture and transcription tool with both CLI and Wails-based GUI interfaces. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides AI-powered summarization using both remote APIs (OpenAI) and local AI (llama.cpp).
+Blackbox is a Windows-only audio capture and transcription tool with a Wails-based GUI interface. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides AI-powered summarization using both remote APIs (OpenAI) and local AI (llama.cpp).
 
 ## Key Features
 
@@ -11,7 +11,7 @@ Blackbox is a Windows-only audio capture and transcription tool with both CLI an
 - **High-Quality Transcription**: whisper.cpp integration with multiple model support
 - **AI-Powered Summarization**: Both remote (OpenAI) and local (llama.cpp) AI summarization
 - **Modern GUI**: Clean, responsive Wails-based interface with Tailwind CSS styling
-- **CLI Tools**: Command-line utilities for automation and scripting
+
 - **Local AI Support**: Full llama.cpp integration for privacy-focused local processing
 
 ## Architecture
@@ -20,10 +20,6 @@ Blackbox is a Windows-only audio capture and transcription tool with both CLI an
 ```
 blackbox/
 ├── main.go                 # Wails GUI entrypoint
-├── cmd/                    # CLI applications
-│   ├── rec/               # Audio recording CLI
-│   ├── transcribe/        # Transcription CLI
-│   └── summarise/         # AI-powered summarization CLI
 ├── internal/               # Core application logic
 │   ├── audio/             # Audio capture (WASAPI loopback + mic)
 │   ├── ui/                # GUI backend services
@@ -125,10 +121,10 @@ blackbox/
 ### 4. External Process Execution (`internal/execx/`)
 
 #### Whisper Integration (`execx.go`)
-- **Purpose**: Wraps whisper.cpp CLI execution
+- **Purpose**: Wraps whisper.cpp execution
 - **Key Methods**:
   - `RunWhisper(bin, model, wav, outDir, lang, threads, extraArgs)`: Execute transcription
-  - `BuildWhisperArgs(...)`: Construct CLI arguments
+  - `BuildWhisperArgs(...)`: Construct whisper arguments
 
 #### Features
 - Automatic log file generation (`out/<base>.log`)
@@ -317,8 +313,8 @@ wruntime.EventsEmit(a.uiCtx, "audioData", map[string]interface{}{
 
 ### Development
 ```bash
-# Build all CLI tools
-go build ./...
+# Build the GUI application
+wails build
 
 # Build GUI with Tailwind CSS
 npm run build:css && wails build -clean
@@ -426,7 +422,7 @@ cd frontend && npm run tailwind:build
 ### Debug Steps
 1. Check console output for error messages
 2. Verify file paths and permissions
-3. Test CLI tools independently
+3. Test GUI functionality
 4. Check environment variable overrides
 5. **Tailwind CSS Issues**:
    - Verify `frontend/dist/index.html` exists and contains classes

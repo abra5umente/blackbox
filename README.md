@@ -12,7 +12,7 @@ A Windows-only meeting & dictation recorder, featuring local transcription, and 
 - **High-Quality Transcription**: whisper.cpp integration with multiple model support
 - **Summarisation**: Use any OpenAI compatible API endpoint (instructions included for local [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master) usage)
 - **Modern GUI**: Clean, responsive Wails-based interface with Tailwind CSS styling
-- **CLI Tools**: Command-line utilities for automation and scripting
+
 - **Audio Mixing**: User-selectable combinations of system and microphone audio
 - **Flexible Output**: Configurable output directories and file naming
 
@@ -33,20 +33,7 @@ cp .\build\bin\blackbox-gui.exe .\blackbox-gui.exe
 .\blackbox-gui.exe
 ```
 
-### CLI Tools
-```bash
-# Build all CLI tools
-go build .\...
 
-# Record system audio
-.\cmd\rec\rec.exe --dur 30 --with-mic
-
-# Transcribe WAV file
-.\cmd\transcribe\transcribe.exe --wav .\out\audio.wav
-
-# Summarise transcript
-.\cmd\summarise\summarise.exe --txt .\out\audio.txt
-```
 
 ## Audio Format
 

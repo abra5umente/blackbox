@@ -5,7 +5,6 @@ go 1.24.5
 require (
 	github.com/gen2brain/malgo v0.11.23
 	github.com/wailsapp/wails/v2 v2.10.2
-	golang.org/x/sys v0.35.0
 )
 
 require (
@@ -34,5 +33,6 @@ require (
 	github.com/wailsapp/mimetype v1.4.1 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
 )
