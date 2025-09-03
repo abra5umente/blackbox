@@ -200,10 +200,6 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 - Integration with other LLM APIs
 - Different summarisation styles (casual, meeting, standup, dictation)
 
-## Contributing
-
-See [CONTRIBUTING.md](https://github.com/abra5umente/blackbox/blob/main/CONTRIBUTING.md)
-
 ## License
 
 See [LICENSE](https://github.com/abra5umente/blackbox/blob/main/LICENSE)
