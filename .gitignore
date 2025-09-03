@@ -21,7 +21,7 @@ Desktop.ini
 .env.*
 .env.local
 .envrc
-llm.json
+/configs/*.json*
 
 ###############################
 # Go build/cache
@@ -44,6 +44,7 @@ out/**
 # Local binaries/models not checked in
 whisper-bin/*
 models/*
+llamacpp-bin/*
 
 ###############################
 # Frontend build artifacts
