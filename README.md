@@ -14,7 +14,7 @@ A Windows-only audio capture and transcription tool with both CLI and Wails-base
 
 ## Screenshots
 
-The GUI features a modern dark theme with:
+The GUI exposes the following functions:
 - **Record Tab**: Audio capture with real-time spectrum analyzer visualization
 - **Transcribe Tab**: WAV file selection and transcription processing
 - **Record & Transcribe & Summarise Tab**: Combined workflow with live audio feedback
