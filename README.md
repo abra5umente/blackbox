@@ -138,8 +138,8 @@ wails build
 
 ## Contributing
 
-See DEVELOPER.md
+See [DEVELOPER.md](https://github.com/abra5umente/blackbox/blob/main/DEVELOPER.md)
 
 ## License
 
-See LICENSE.md
+See [LICENSE](https://github.com/abra5umente/blackbox/blob/main/LICENSE)
