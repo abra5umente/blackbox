@@ -2,15 +2,17 @@
 
 ## Project Overview
 
-Blackbox is a Windows-only audio capture and transcription tool with both CLI and Wails-based GUI interfaces. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides a foundation for future summarization features.
+Blackbox is a Windows-only audio capture and transcription tool with both CLI and Wails-based GUI interfaces. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides AI-powered summarization using both remote APIs (OpenAI) and local AI (llama.cpp).
 
 ## Key Features
 
 - **Real-time Audio Capture**: WASAPI loopback for system audio + optional microphone input
 - **Live Spectrum Analyzer**: Beautiful real-time visualization of audio activity in the GUI
 - **High-Quality Transcription**: whisper.cpp integration with multiple model support
+- **AI-Powered Summarization**: Both remote (OpenAI) and local (llama.cpp) AI summarization
 - **Modern GUI**: Clean, responsive Wails-based interface with Tailwind CSS styling
 - **CLI Tools**: Command-line utilities for automation and scripting
+- **Local AI Support**: Full llama.cpp integration for privacy-focused local processing
 
 ## Architecture
 
@@ -28,24 +30,28 @@ blackbox/
 │   ├── wav/               # WAV file handling
 │   └── execx/             # External process execution
 ├── frontend/               # Static web assets for GUI
-│   ├── src/               # Source HTML for Tailwind scanning
 │   ├── dist/              # Built assets (HTML, CSS, JS)
 │   ├── wailsjs/           # Wails-generated bindings
 │   ├── tailwind.config.js # Tailwind CSS configuration
 │   └── package.json       # Frontend dependencies and scripts
-├── models/                 # Whisper model files
+├── models/                 # Whisper and Llama model files
 ├── whisper-bin/            # Whisper.cpp executables
+├── llamacpp-bin/           # Llama.cpp executables for local AI
 ├── configs/                # Application configuration files
+│   ├── llm.example.json   # Example LLM configuration
+│   ├── local.json         # Local AI configuration
+│   └── remote.json        # Remote AI configuration
 ├── config/                 # GUI settings (auto-created)
 ├── package.json            # Project build scripts
 └── out/                    # Output directory
 ```
 
 ### Technology Stack
-- **Backend**: Go 1.24+
-- **GUI Framework**: Wails v2 (Go + WebView2)
+- **Backend**: Go 1.24.5
+- **GUI Framework**: Wails v2.10.2 (Go + WebView2)
 - **Audio**: malgo (WASAPI loopback + capture)
 - **Transcription**: whisper.cpp
+- **AI Summarization**: OpenAI API + llama.cpp (local)
 - **Frontend**: Vanilla HTML/CSS/JavaScript with Tailwind CSS
 - **Styling**: Tailwind CSS v3.4.17 + PostCSS + Autoprefixer
 - **Platform**: Windows 11 only
@@ -72,12 +78,12 @@ blackbox/
 
 #### Audio Format
 - **Format**: PCM S16LE (16-bit signed little-endian)
-- **Sample Rate**: 48 kHz
-- **Channels**: Stereo (loopback) + Mono (microphone)
+- **Sample Rate**: 16 kHz (optimized for speech recognition)
+- **Channels**: Mono (both loopback and microphone)
 - **Quality**: Optimized for transcription while maintaining excellent audio clarity
 - **Mixing**: Sample-wise averaging to prevent clipping
 
-### 2. Real-Time Spectrum Analyzer (`frontend/src/index.html`)
+### 2. Real-Time Spectrum Analyzer (`frontend/dist/index.html`)
 
 #### RealSpectrumAnalyzer Class
 - **Purpose**: Provides real-time audio visualization in the GUI
@@ -141,6 +147,7 @@ blackbox/
   - `Summarise(txtPath)`: Process transcript with AI-powered summarization
   - `PickWavFromOutDir()`: File picker for WAV files
   - `PickTxtFromOutDir()`: File picker for TXT files
+  - `PickModelFile()`: File picker for Llama model files
 
 #### Audio Data Emission
 - **Real-Time Streaming**: `emitAudioData()` sends raw PCM data to frontend every frame
@@ -153,7 +160,11 @@ blackbox/
 - **Storage**: `./config/ui.json`
 - **Key Fields**:
   - `OutDir`: Output directory path
-  - Extensible for future settings
+  - `UseLocalAI`: Enable local AI summarization
+  - `LlamaTemp`: Temperature for local AI (0.0-2.0)
+  - `LlamaContext`: Context window size for local AI
+  - `LlamaModel`: Path to Llama model file
+  - `LlamaAPIKey`: API key for llama-server authentication
 
 #### Recording Modes
 1. **Loopback Only**: System audio capture
@@ -171,13 +182,13 @@ blackbox/
 #### Tabs
 1. **Record**: Audio capture with mic/dictation options + real-time spectrum analyzer
 2. **Transcribe**: WAV file selection and transcription
-3. **Record & Transcribe & Summarise**: Combined workflow with live audio feedback
-4. **Summarise**: TXT file selection and processing
-5. **Settings**: Configuration management
+3. **Record & Transcribe & Summarise**: Combined workflow with live audio feedback + AI summarization
+4. **Summarise**: TXT file selection and AI processing (remote or local)
+5. **Settings**: Configuration management including local AI settings
 
 #### Tailwind CSS Integration
 - **Configuration**: `frontend/tailwind.config.js` - scans HTML/JS files for classes
-- **Input CSS**: `frontend/src/input.css` - contains Tailwind directives
+- **Input CSS**: `frontend/dist/input.css` - contains Tailwind directives
 - **Build Process**: Automated CSS generation with npm scripts
 - **Development**: Watch mode for automatic CSS rebuilding
 - **Production**: CSS embedded in final executable
@@ -197,6 +208,7 @@ StopRecording() (string, error)                        // Returns final WAV path
 // File Operations
 PickWavFromOutDir() (string, error)                    // Returns selected WAV path
 PickTxtFromOutDir() (string, error)                    // Returns selected TXT path
+PickModelFile() (string, error)                        // Returns selected model path
 
 // Processing
 Transcribe(wavPath string) (string, error)             // Returns TXT path
@@ -230,16 +242,30 @@ wruntime.EventsEmit(a.uiCtx, "audioData", map[string]interface{}{
 ### Settings File (`./config/ui.json`)
 ```json
 {
-  "out_dir": "./out"
+  "out_dir": "./out",
+  "use_local_ai": false,
+  "llama_temp": 0.1,
+  "llama_context": 32000,
+  "llama_model": "",
+  "llama_api_key": ""
 }
 ```
 
-### LLM Config (`./configs/llm.json`)
+### Remote AI Config (`./configs/remote.json`)
 ```json
 {
   "base_url": "https://api.openai.com/v1",
-  "api_key_env": "OPENAI_API_KEY",
+  "api_key": "your_openai_api_key_here",
   "model": "gpt-4o-mini"
+}
+```
+
+### Local AI Config (`./configs/local.json`)
+```json
+{
+  "base_url": "http://127.0.0.1:8080",
+  "api_key": "1234",
+  "model": "gemma-3-12b-it-q4_0.gguf"
 }
 ```
 
@@ -274,11 +300,18 @@ wruntime.EventsEmit(a.uiCtx, "audioData", map[string]interface{}{
 - **User Feedback**: Return meaningful error messages
 
 ### 6. Tailwind CSS Development
-- **Content Scanning**: Configure `tailwind.config.js` to scan source HTML files
+- **Content Scanning**: Configure `tailwind.config.js` to scan HTML files in `frontend/dist/`
 - **Build Process**: Use npm scripts for CSS generation (`tailwind:build`, `tailwind:watch`)
-- **Source Files**: Maintain HTML in `frontend/src/` for Tailwind scanning
+- **Source Files**: Maintain HTML in `frontend/dist/` for Tailwind scanning
 - **Production**: Ensure CSS is built before Wails build process
 - **Wails Integration**: Configure `wails.json` with `frontend:dev:watcher` for development
+
+### 7. Local AI Integration
+- **Server Management**: Automatic llama-server startup/shutdown for local AI
+- **Model Selection**: File picker for GGUF model files
+- **Configuration**: Temperature, context window, and API key settings
+- **Fallback**: Graceful fallback to remote AI if local AI fails
+- **Privacy**: Complete local processing without external API calls
 
 ## Build and Deployment
 
@@ -310,11 +343,11 @@ npm run build:css && wails build -clean
 
 ### Dependencies
 - **Go Modules**: `go.mod` and `go.sum`
-- **Wails**: `github.com/wailsapp/wails/v2`
-- **Audio**: `github.com/gen2brain/malgo`
-- **System**: `golang.org/x/sys`
+- **Wails**: `github.com/wailsapp/wails/v2@v2.10.2`
+- **Audio**: `github.com/gen2brain/malgo@v0.11.23`
+- **System**: `golang.org/x/sys@v0.35.0`
 - **Frontend**: Node.js and npm for Tailwind CSS build process
-- **CSS Framework**: `tailwindcss@^3.4.0`, `postcss`, `autoprefixer`
+- **CSS Framework**: `tailwindcss@^3.4.17`, `postcss@^8.5.6`, `autoprefixer@^10.4.21`
 
 ## Build Scripts and Automation
 
@@ -364,12 +397,19 @@ cd frontend && npm run tailwind:build
 4. Wire up in workflow tabs
 
 ### UI Development with Tailwind CSS
-1. **HTML Structure**: Add new HTML elements in `frontend/src/index.html`
+1. **HTML Structure**: Add new HTML elements in `frontend/dist/index.html`
 2. **Styling**: Use Tailwind utility classes for consistent design
 3. **Responsiveness**: Leverage Tailwind's responsive utilities
 4. **Accessibility**: Include proper focus states and ARIA attributes
 5. **CSS Generation**: Ensure new classes are included in Tailwind build
 6. **Testing**: Verify styling in both development and production builds
+
+### Local AI Setup
+1. **Model Download**: Download GGUF model files to `./models/` directory
+2. **Configuration**: Set model path, temperature, and context window in settings
+3. **API Key**: Configure authentication key for llama-server
+4. **Testing**: Use local AI checkbox in Summarise or RT tabs
+5. **Performance**: Adjust context window based on available RAM
 
 ## Troubleshooting
 
@@ -380,6 +420,8 @@ cd frontend && npm run tailwind:build
 4. **GUI Not Responding**: Ensure WebView2 runtime is installed
 5. **Tailwind CSS Not Working**: Verify CSS build process and file paths
 6. **Styling Missing in Production**: Ensure CSS is built before Wails build
+7. **Local AI Not Working**: Check llama-server binary and model file paths
+8. **Summarization Fails**: Verify API keys and network connectivity
 
 ### Debug Steps
 1. Check console output for error messages
@@ -387,11 +429,16 @@ cd frontend && npm run tailwind:build
 3. Test CLI tools independently
 4. Check environment variable overrides
 5. **Tailwind CSS Issues**:
-   - Verify `frontend/src/index.html` exists and contains classes
+   - Verify `frontend/dist/index.html` exists and contains classes
    - Check `frontend/dist/output.css` file size and content
    - Run `npm run tailwind:build` manually
    - Verify `tailwind.config.js` content paths
    - Check that CSS is linked in HTML files
+6. **Local AI Issues**:
+   - Verify `llamacpp-bin/llama-server.exe` exists
+   - Check model file path in settings
+   - Ensure sufficient RAM for model loading
+   - Test llama-server manually: `./llamacpp-bin/llama-server.exe --help`
 
 ## Future Enhancements
 
@@ -399,9 +446,11 @@ cd frontend && npm run tailwind:build
 - Device selection for audio sources
 - Advanced audio processing (noise reduction, normalization)
 - Real-time transcription streaming
-- Integration with actual LLM APIs
+- Multiple AI provider support (Anthropic, Google, etc.)
 - Audio format conversion options
 - Batch processing capabilities
+- Model management and automatic updates
+- Advanced prompt customization
 
 ### Current UI Features
 - **Modern Dark Theme**: Professional appearance with proper contrast
@@ -418,5 +467,8 @@ cd frontend && npm run tailwind:build
 - Workflow automation
 - Cloud storage integration
 - Advanced visualization options
+- AI provider plugins
+- Custom prompt templates
+- Export formats (PDF, DOCX, etc.)
 
 This documentation should provide developers with comprehensive understanding of the Blackbox project structure, enabling effective code analysis, modification, and extension.

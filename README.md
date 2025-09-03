@@ -178,27 +178,15 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 
 ### Prerequisites
 - Go 1.24+
-- Node.js and npm
+- Node.js and npm (for Tailwind CSS building)
 - Wails CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
 - [whisper-cli](https://github.com/ggml-org/whisper.cpp) binaries extracted to .\whisper-bin
 - [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master) binaries extracted to .\llamacpp-bin
 
-### Development
-```bash
-# Install dependencies
-npm install
-
-# Run development server (standard Wails command)
-wails dev
-
-# Build production GUI (standard Wails command)
-wails build
-```
 
 ### Build Commands
-- **Standard Wails**: `wails build` - Direct Wails build command (recommended)
-- **With CSS build**: `npm run build:css && wails build -clean` - Manual build with CSS
-- **npm wrapper**: `npm run build:gui` - Custom npm script that wraps Wails commands
+- **Development**: `wails dev` - Run with hot reload and automatic CSS building
+- **Production**: `wails build` - Build final executable with automatic CSS building
 
 ## Usage Examples
 
@@ -209,7 +197,6 @@ wails build
 4. Begin your meeting/dictation
 5. Once done, click "Stop Recording."
 6. The application will automatically transcribe + summarise your recording.
-7. The recording is then deleted - all you are left with is the transcript and the summary.
 
 ### Advanced Recording Modes
 - **Loopback Only**: System audio capture with spectrum visualisation
