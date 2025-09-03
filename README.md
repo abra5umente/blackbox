@@ -103,7 +103,6 @@ wails build
 - **Standard Wails**: `wails build` - Direct Wails build command (recommended)
 - **With CSS build**: `npm run build:css && wails build -clean` - Manual build with CSS
 - **npm wrapper**: `npm run build:gui` - Custom npm script that wraps Wails commands
-```
 
 ## Usage Examples
 
