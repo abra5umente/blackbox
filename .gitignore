@@ -3,6 +3,7 @@
 ###############################
 # Cursor
 .cursor/*
+DEVELOPER_GUIDE.md
 
 # VSCode
 .vscode/
