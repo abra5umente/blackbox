@@ -4,7 +4,7 @@ This document provides comprehensive information for AI agents and developers wo
 
 ## Project Overview
 
-Blackbox is a Windows-only audio capture and transcription tool with a Wails-based GUI interface. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides AI-powered summarization using both remote APIs (OpenAI) and local AI (llama.cpp).
+Blackbox is a Windows-only audio capture and transcription tool with a Wails-based GUI interface. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides AI-powered summarisation using both remote APIs (OpenAI) and local AI (llama.cpp).
 
 ## Architecture
 
@@ -39,7 +39,7 @@ blackbox/
 - **GUI Framework**: Wails v2.10.2 (Go + WebView2)
 - **Audio**: malgo (WASAPI loopback + capture)
 - **Transcription**: whisper.cpp
-- **AI Summarization**: OpenAI API + llama.cpp (local)
+- **AI Summarisation**: OpenAI API + llama.cpp (local)
 - **Frontend**: Vanilla HTML/CSS/JavaScript with Tailwind CSS
 - **Styling**: Tailwind CSS v3.4.17 + PostCSS + Autoprefixer
 - **Platform**: Windows 11 only
@@ -66,27 +66,27 @@ blackbox/
 
 #### Audio Format
 - **Format**: PCM S16LE (16-bit signed little-endian)
-- **Sample Rate**: 16 kHz (optimized for speech recognition)
+- **Sample Rate**: 16 kHz (optimised for speech recognition)
 - **Channels**: Mono (both loopback and microphone)
-- **Quality**: Optimized for transcription while maintaining excellent audio clarity
+- **Quality**: Optimised for transcription while maintaining excellent audio clarity
 - **Mixing**: Sample-wise averaging to prevent clipping
 
-### 2. Real-Time Spectrum Analyzer (`frontend/dist/index.html`)
+### 2. Real-Time Spectrum Analyser (`frontend/dist/index.html`)
 
-#### RealSpectrumAnalyzer Class
-- **Purpose**: Provides real-time audio visualization in the GUI
+#### RealSpectrumAnalyser Class
+- **Purpose**: Provides real-time audio visualisation in the GUI
 - **Key Features**:
   - **32 Responsive Bars**: Each bar represents a frequency band
   - **Ultra-Sensitive Response**: Bars move dramatically with even quiet sounds
-  - **60fps Animation**: Smooth visualization using `requestAnimationFrame`
-  - **Dual Audio Sources**: Visualizes both loopback and microphone audio
-  - **Professional Styling**: Dynamic color intensity based on audio levels
+  - **60fps Animation**: Smooth visualisation using `requestAnimationFrame`
+  - **Dual Audio Sources**: Visualises both loopback and microphone audio
+  - **Professional Styling**: Dynamic colour intensity based on audio levels
 
 #### Key Methods
 - `handleAudioData(data)`: Processes incoming PCM data from Go backend
 - `updateSpectrum()`: Performs frequency analysis and updates bar heights
-- `animate()`: 60fps animation loop for smooth visualization
-- `startRecording()` / `stopRecording()`: Controls analyzer state
+- `animate()`: 60fps animation loop for smooth visualisation
+- `startRecording()` / `stopRecording()`: Controls analyser state
 
 #### Audio Data Processing
 - **Data Reception**: Receives raw PCM S16LE bytes via Wails events
@@ -139,7 +139,7 @@ blackbox/
   - `StartRecordingAdvanced(withMic, dictation bool)`: Advanced recording modes
   - `StopRecording()`: End capture and finalize WAV
   - `Transcribe(wavPath)`: Run whisper on WAV file
-  - `Summarise(txtPath)`: Process transcript with AI-powered summarization
+  - `Summarise(txtPath)`: Process transcript with AI-powered summarisation
   - `PickWavFromOutDir()`: File picker for WAV files
   - `PickTxtFromOutDir()`: File picker for TXT files
   - `PickModelFile()`: File picker for Llama model files
@@ -155,7 +155,7 @@ blackbox/
 - **Storage**: `./config/ui.json`
 - **Key Fields**:
   - `OutDir`: Output directory path
-  - `UseLocalAI`: Enable local AI summarization
+  - `UseLocalAI`: Enable local AI summarisation
   - `LlamaTemp`: Temperature for local AI (0.0-2.0)
   - `LlamaContext`: Context window size for local AI
   - `LlamaModel`: Path to Llama model file
@@ -175,9 +175,9 @@ blackbox/
 - **Styling**: Tailwind CSS v3.4.17 for rapid UI development
 
 #### Tabs
-1. **Record**: Audio capture with mic/dictation options + real-time spectrum analyzer
+1. **Record**: Audio capture with mic/dictation options + real-time spectrum analyser
 2. **Transcribe**: WAV file selection and transcription
-3. **Record & Transcribe & Summarise**: Combined workflow with live audio feedback + AI summarization
+3. **Record & Transcribe & Summarise**: Combined workflow with live audio feedback + AI summarisation
 4. **Summarise**: TXT file selection and AI processing (remote or local)
 5. **Settings**: Configuration management including local AI settings
 
@@ -410,13 +410,13 @@ cd frontend && npm run tailwind:build
 
 ### Common Issues
 1. **Audio Not Recording**: Check device permissions and default devices
-2. **Spectrum Analyzer Not Moving**: Ensure audio is playing and recording is active
+2. **Spectrum Analyser Not Moving**: Ensure audio is playing and recording is active
 3. **Whisper Errors**: Verify binary path and model existence
 4. **GUI Not Responding**: Ensure WebView2 runtime is installed
 5. **Tailwind CSS Not Working**: Verify CSS build process and file paths
 6. **Styling Missing in Production**: Ensure CSS is built before Wails build
 7. **Local AI Not Working**: Check llama-server binary and model file paths
-8. **Summarization Fails**: Verify API keys and network connectivity
+8. **Summarisation Fails**: Verify API keys and network connectivity
 
 ### Debug Steps
 1. Check console output for error messages
@@ -453,7 +453,7 @@ cd frontend && npm run tailwind:build
 - **Interactive Elements**: Hover effects, focus states, and smooth transitions
 - **Accessibility**: Proper focus indicators and disabled states
 - **Tabbed Interface**: Clean navigation between different functionality
-- **Real-Time Spectrum Analyzer**: Live audio visualization with 60fps animation
+- **Real-Time Spectrum Analyser**: Live audio visualisation with 60fps animation
 
 ### Extension Points
 - Audio source plugins
@@ -461,7 +461,7 @@ cd frontend && npm run tailwind:build
 - Output format handlers
 - Workflow automation
 - Cloud storage integration
-- Advanced visualization options
+- Advanced visualisation options
 - AI provider plugins
 - Custom prompt templates
 - Export formats (PDF, DOCX, etc.)
