@@ -178,7 +178,7 @@ func (a *App) Transcribe(wavPath string) (string, error) {
 	return txtPath, nil
 }
 
-// Summarise reads configs/llm.json and sends the transcript to OpenAI or local AI for summarization.
+// Summarise reads configs/llm.json and sends the transcript to OpenAI or local AI for summarisation.
 func (a *App) Summarise(txtPath string) (string, error) {
 	if strings.TrimSpace(txtPath) == "" {
 		return "", errors.New("txt path required")
@@ -195,7 +195,7 @@ func (a *App) Summarise(txtPath string) (string, error) {
 		return "", fmt.Errorf("failed to read transcript: %w", err)
 	}
 
-	// Create the summarization prompt
+	// Create the summarisation prompt
 	prompt := `You are a specialised transcript summariser. Your ONLY purpose is to read meeting transcripts
 and produce comprehensive, well-structured summaries. You are verbose, detailed, and explanatory,
 but still clear and readable. Never invent facts, names, or dates—if information is missing,
@@ -241,7 +241,7 @@ Style:
 		// Use local AI (llama.cpp) - load from local.json
 		summary, err = a.summariseWithLocalAI(string(transcript), prompt)
 		if err != nil {
-			return "", fmt.Errorf("local AI summarization failed: %w", err)
+			return "", fmt.Errorf("local AI summarisation failed: %w", err)
 		}
 	} else {
 		// Use remote AI - load from remote.json
@@ -286,7 +286,7 @@ Style:
 	return fmt.Sprintf("Summary written to: %s\n\n--- Summary ---\n%s", outputPath, summary), nil
 }
 
-// summariseWithLocalAI uses the local llama-server for summarization
+// summariseWithLocalAI uses the local llama-server for summarisation
 func (a *App) summariseWithLocalAI(transcript, prompt string) (string, error) {
 	// Ensure llama-server is running
 	if !a.isLlamaServerRunning() {
@@ -325,7 +325,7 @@ func (a *App) summariseWithLocalAI(transcript, prompt string) (string, error) {
 		return "", fmt.Errorf("local AI request failed: %w", err)
 	}
 
-	// Shutdown llama-server after successful summarization
+	// Shutdown llama-server after successful summarisation
 	a.stopLlamaServer()
 
 	return summary, nil
