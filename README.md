@@ -2,7 +2,7 @@
 
 A Windows-only meeting & dictation recorder, featuring local transcription, and automatic summarisation.
 
-<img width="1005" height="1207" alt="image" src="https://github.com/user-attachments/assets/6db8f51d-30df-4f22-9800-3ffd65a88aa3" />  
+<img width="1007" height="1119" alt="image" src="https://github.com/user-attachments/assets/89d1fac6-a8c8-4f87-a518-2b839aae6e9f" />  
 
 ## Features
 
@@ -204,11 +204,11 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 
 ## Future Enhancements
 
-- Device selection for audio sources
-- Advanced audio processing (noise reduction, normalisation)
-- Take notes and use them in the summary automatically with timestamping
-- Integration with other LLM APIs
-- Different summarisation styles (casual, meeting, standup, dictation)
+- [ ] Device selection for audio sources
+- [ ] Advanced audio processing (noise reduction, normalisation)
+- [ ] Take notes and use them in the summary automatically with timestamping
+- [x] Integration with other LLM APIs
+- [x] Different summarisation styles (casual, meeting, standup, dictation)
 
 ## License
 
