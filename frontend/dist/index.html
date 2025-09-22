@@ -1,0 +1,782 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blackbox</title>
+    
+    <!-- Favicon and Icons -->
+    <link rel="icon" type="image/x-icon" href="/icons/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/android-chrome-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/android-chrome-512x512.png" />
+    <link rel="manifest" href="/icons/site.webmanifest" />
+    
+    <link href="/output.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+  </head>
+  <body class="font-sans m-0 text-gray-200 bg-gray-900">
+    <header class="px-4 py-3 bg-gray-800 border-b border-gray-700">
+      <strong class="text-white">Blackbox</strong>
+    </header>
+    <div class="flex gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
+      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-blue-600 text-white ring-2 ring-blue-400 hover:bg-blue-700 transition-colors" data-tab="auto">Auto</div>
+      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="tools">Tools</div>
+      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="settings">Settings</div>
+    </div>
+
+    <!-- Auto Tab - Combined Record, Transcribe & Summarise -->
+    <section id="auto" class="page block p-4">
+      <div class="my-3">
+        <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+          <input type="checkbox" id="autoWithMic" checked class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+          Use Microphone
+        </label>
+      </div>
+      <div class="my-3">
+        <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+          <input type="checkbox" id="autoDictation" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+          Dictation mode (mic only)
+        </label>
+      </div>
+      <div class="my-3">
+        <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+          <input type="checkbox" id="autoLocalAI" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+          Local AI summarisation
+        </label>
+      </div>
+      <div class="my-3">
+        <label class="block mb-2 text-gray-300">Summarisation Prompt</label>
+        <select id="autoPromptSelect" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <option value="">Loading prompts...</option>
+        </select>
+        <div class="text-gray-400 text-xs mt-1" id="autoPromptDescription"></div>
+      </div>
+      <div class="my-3">
+        <button id="btnAutoStart" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Begin</button>
+        <button id="btnAutoStop" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-2" disabled>Stop Recording</button>
+      </div>
+      <!-- System Messages -->
+      <div class="my-3">
+        <div class="text-gray-300 text-sm mb-2">System Messages</div>
+        <div id="autoLog" class="whitespace-pre-wrap bg-gray-900 border border-gray-700 rounded-md p-3 max-h-32 overflow-auto text-sm"></div>
+      </div>
+      
+      <!-- Audio Player for recorded WAV -->
+      <div id="audioPlayerSection" class="my-4 hidden">
+        <div class="text-gray-300 text-sm mb-2">Recorded Audio</div>
+        <div class="bg-gray-800 border border-gray-700 rounded-md p-3">
+          <audio id="audioPlayer" controls class="w-full">
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      </div>
+      
+      <!-- Formatted Output for Transcript/Summary -->
+      <div id="formattedOutputSection" class="my-4 hidden">
+        <div class="text-gray-300 text-sm mb-2">Formatted Output</div>
+        <div id="formattedOutput" class="bg-gray-800 border border-gray-700 rounded-md p-4 max-h-96 overflow-auto prose prose-invert max-w-none">
+          <!-- Formatted markdown content will be rendered here -->
+        </div>
+      </div>
+      
+      <!-- Spectrum Analyser for Auto tab -->
+      <div class="my-4">
+        <div class="text-gray-300 text-sm mb-2">Audio Activity</div>
+        <div id="autoSpectrum" class="bg-gray-800 border border-gray-700 rounded-md p-3 h-24 flex items-end justify-between gap-1">
+          <!-- Spectrum bars will be generated here -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Tools Tab - Individual Record, Transcribe, Summarise -->
+    <section id="tools" class="page hidden p-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Record Section -->
+        <div class="bg-gray-800 border border-gray-700 rounded-md p-4">
+          <h3 class="text-lg font-semibold text-white mb-3">Record</h3>
+          <div class="my-3">
+            <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+              <input type="checkbox" id="toolsRecWithMic" checked class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+              Use Microphone
+            </label>
+          </div>
+          <div class="my-3">
+            <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+              <input type="checkbox" id="toolsRecDictation" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+              Dictation mode (mic only)
+            </label>
+          </div>
+          <div class="my-3">
+            <button id="btnToolsStart" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full">Start Recording</button>
+            <button id="btnToolsStop" class="bg-gray-700 hover:bg-gray-600 text-gray-200 border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full mt-2">Stop</button>
+          </div>
+          <div class="my-3"><div id="toolsRecStatus" class="text-gray-400 text-sm">Idle</div></div>
+          
+          <!-- Audio Player for tools recorded WAV -->
+          <div id="toolsAudioPlayerSection" class="my-4 hidden">
+            <div class="text-gray-300 text-sm mb-2">Recorded Audio</div>
+            <audio id="toolsAudioPlayer" controls class="w-full">
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        </div>
+
+        <!-- Transcribe Section -->
+        <div class="bg-gray-800 border border-gray-700 rounded-md p-4">
+          <h3 class="text-lg font-semibold text-white mb-3">Transcribe</h3>
+          <div class="my-3">
+            <button id="btnToolsPickWav" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors w-full">Choose WAV</button>
+            <span id="toolsPickedWav" class="text-gray-400 text-sm block mt-2 break-words"></span>
+          </div>
+          <div class="my-3">
+            <button id="btnToolsTranscribe" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full" disabled>Transcribe</button>
+          </div>
+          <div class="my-3">
+            <div class="text-gray-300 text-sm mb-2">System Messages</div>
+            <div id="toolsTranscribeLog" class="whitespace-pre-wrap bg-gray-900 border border-gray-700 rounded-md p-3 max-h-32 overflow-auto text-sm"></div>
+          </div>
+          
+          <!-- Audio Player for transcribe WAV -->
+          <div id="toolsTranscribeAudioPlayerSection" class="my-4 hidden">
+            <div class="text-gray-300 text-sm mb-2">Audio File</div>
+            <audio id="toolsTranscribeAudioPlayer" controls class="w-full">
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        </div>
+
+        <!-- Summarise Section -->
+        <div class="bg-gray-800 border border-gray-700 rounded-md p-4">
+          <h3 class="text-lg font-semibold text-white mb-3">Summarise</h3>
+          <div class="my-3">
+            <button id="btnToolsPickTxt" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors w-full">Choose TXT</button>
+            <span id="toolsPickedTxt" class="text-gray-400 text-sm block mt-2 break-words"></span>
+          </div>
+          <div class="my-3">
+            <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+              <input type="checkbox" id="toolsSummariseLocalAI" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+              Local AI summarisation
+            </label>
+          </div>
+          <div class="my-3">
+            <label class="block mb-2 text-gray-300">Summarisation Prompt</label>
+            <select id="toolsPromptSelect" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full">
+              <option value="">Loading prompts...</option>
+            </select>
+            <div class="text-gray-400 text-xs mt-1" id="toolsPromptDescription"></div>
+          </div>
+          <div class="my-3">
+            <button id="btnToolsSummarise" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full" disabled>Summarise</button>
+          </div>
+          <div class="my-3">
+            <div class="text-gray-300 text-sm mb-2">System Messages</div>
+            <div id="toolsSummariseLog" class="whitespace-pre-wrap bg-gray-900 border border-gray-700 rounded-md p-3 max-h-32 overflow-auto text-sm break-words"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Formatted Output for Tools -->
+      <div id="toolsFormattedOutputSection" class="my-6 hidden">
+        <div class="text-gray-300 text-sm mb-2">Formatted Output</div>
+        <div id="toolsFormattedOutput" class="bg-gray-800 border border-gray-700 rounded-md p-4 max-h-96 overflow-auto prose prose-invert max-w-none">
+          <!-- Formatted markdown content will be rendered here -->
+        </div>
+      </div>
+    </section>
+
+    <section id="settings" class="page hidden p-4">
+      <div class="my-3">
+        <label class="block mb-2 text-gray-300">Output Directory</label>
+        <input type="text" id="outDir" placeholder="./out" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-96 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+      </div>
+      
+      <div class="my-6 border-t border-gray-700 pt-4">
+        <h3 class="text-lg font-semibold text-white mb-3">Local AI Settings</h3>
+        <div class="text-gray-400 text-sm mb-3">Configure local AI parameters. Use the checkboxes in the Summarise and Record & Transcribe & Summarise tabs to enable local AI.</div>
+        
+        <div class="my-3">
+          <label class="block mb-2 text-gray-300">Model File</label>
+          <div class="flex gap-2">
+            <input type="text" id="llamaModel" placeholder="Select model file..." class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" readonly />
+            <button id="btnPickModel" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors">Browse</button>
+          </div>
+        </div>
+        
+        <div class="my-3">
+          <label class="block mb-2 text-gray-300">Temperature</label>
+          <input type="number" id="llamaTemp" min="0" max="2" step="0.1" placeholder="0.1" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+        </div>
+        
+        <div class="my-3">
+          <label class="block mb-2 text-gray-300">Context Window</label>
+          <input type="number" id="llamaContext" min="1024" max="131072" step="1024" placeholder="32000" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-32 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+        </div>
+        
+        <div class="my-3">
+          <label class="block mb-2 text-gray-300">Server API Key</label>
+          <input type="password" id="llamaAPIKey" placeholder="API key for llama-server authentication..." class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-96 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          <div class="text-gray-400 text-xs mt-1">This sets the API key that llama-server will use for authentication</div>
+        </div>
+      </div>
+      
+      <div class="my-3">
+        <button id="btnSaveSettings" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors">Save Settings</button>
+      </div>
+      <div class="my-3"><div id="settingsInfo" class="text-gray-400 text-sm"></div></div>
+    </section>
+
+    <script src="/wailsjs/runtime/runtime.js"></script>
+    <script src="/wailsjs/go/ui/App.js"></script>
+    <script>
+      // Utility functions
+      const setActive = (name) => {
+        document.querySelectorAll('.tab').forEach(t => {
+          if (t.dataset.tab === name) {
+            t.classList.add('bg-blue-600', 'text-white', 'ring-2', 'ring-blue-400');
+            t.classList.remove('bg-gray-700', 'text-gray-300');
+          } else {
+            t.classList.add('bg-gray-700', 'text-gray-300');
+            t.classList.remove('bg-blue-600', 'text-white', 'ring-2', 'ring-blue-400');
+          }
+        });
+        document.querySelectorAll('.page').forEach(p => {
+          if (p.id === name) {
+            p.classList.remove('hidden');
+            p.classList.add('block');
+          } else {
+            p.classList.add('hidden');
+            p.classList.remove('block');
+          }
+        });
+      };
+
+      // Markdown rendering utility
+      const renderMarkdown = (text, containerId) => {
+        if (typeof marked !== 'undefined') {
+          const html = marked.parse(text);
+          document.getElementById(containerId).innerHTML = html;
+        } else {
+          // Fallback to plain text if marked is not available
+          document.getElementById(containerId).textContent = text;
+        }
+      };
+
+      // Audio player utility
+      const setupAudioPlayer = async (audioElementId, wavPath) => {
+        const audio = document.getElementById(audioElementId);
+        if (audio && wavPath) {
+          try {
+            console.log('Getting audio data URL for:', wavPath);
+            
+            // Use the backend method to get a data URL
+            const dataUrl = await App().GetAudioDataURL(wavPath);
+            console.log('Got data URL, length:', dataUrl.length);
+            
+            // Set the source and enable controls
+            audio.src = dataUrl;
+            audio.controls = true;
+            audio.preload = 'metadata';
+            
+            // Load the audio
+            audio.load();
+            
+            console.log('Audio player setup complete');
+          } catch (error) {
+            console.error('Failed to setup audio player:', error);
+            // Fallback: try direct file access (may not work due to security)
+            const fileUrl = 'file:///' + wavPath.replace(/\\/g, '/');
+            audio.src = fileUrl;
+            audio.controls = true;
+            audio.preload = 'metadata';
+            audio.load();
+          }
+        }
+      };
+
+      // Wails bindings
+      const App = () => (window.go && window.go.ui && window.go.ui.App) ? window.go.ui.App : null;
+
+      // Prompt Management
+      const loadPrompts = async () => {
+        try {
+          availablePrompts = await App().GetAvailablePrompts();
+          selectedPrompt = await App().GetSelectedPrompt();
+          
+          // Populate both dropdowns
+          populatePromptDropdown('autoPromptSelect');
+          populatePromptDropdown('toolsPromptSelect');
+          
+          // Set selected prompt
+          document.getElementById('autoPromptSelect').value = selectedPrompt;
+          document.getElementById('toolsPromptSelect').value = selectedPrompt;
+          
+          // Update descriptions
+          updatePromptDescription('autoPromptDescription', selectedPrompt);
+          updatePromptDescription('toolsPromptDescription', selectedPrompt);
+        } catch (e) {
+          console.error('Failed to load prompts:', e);
+        }
+      };
+
+      const populatePromptDropdown = (selectId) => {
+        const select = document.getElementById(selectId);
+        select.innerHTML = '';
+        
+        availablePrompts.forEach(prompt => {
+          const option = document.createElement('option');
+          option.value = prompt.name;
+          option.textContent = prompt.name;
+          select.appendChild(option);
+        });
+      };
+
+      const updatePromptDescription = (descriptionId, promptName) => {
+        const prompt = availablePrompts.find(p => p.name === promptName);
+        const descriptionEl = document.getElementById(descriptionId);
+        if (prompt && descriptionEl) {
+          descriptionEl.textContent = prompt.description || '';
+        }
+      };
+
+      const setSelectedPrompt = async (promptName) => {
+        try {
+          await App().SetSelectedPrompt(promptName);
+          selectedPrompt = promptName;
+          
+          // Update both dropdowns
+          document.getElementById('autoPromptSelect').value = promptName;
+          document.getElementById('toolsPromptSelect').value = promptName;
+          
+          // Update descriptions
+          updatePromptDescription('autoPromptDescription', promptName);
+          updatePromptDescription('toolsPromptDescription', promptName);
+        } catch (e) {
+          console.error('Failed to set prompt:', e);
+        }
+      };
+
+      // Settings
+      const loadSettings = async () => {
+        try {
+          const s = await App().GetSettings();
+          document.getElementById('outDir').value = (s && (s.out_dir || s.OutDir)) || './out';
+          
+          // Load local AI settings
+          const useLocalAI = s && s.use_local_ai;
+          document.getElementById('autoLocalAI').checked = useLocalAI;
+          document.getElementById('toolsSummariseLocalAI').checked = useLocalAI;
+          document.getElementById('llamaModel').value = (s && s.llama_model) || '';
+          document.getElementById('llamaTemp').value = (s && s.llama_temp) || '0.1';
+          document.getElementById('llamaContext').value = (s && s.llama_context) || '32000';
+          document.getElementById('llamaAPIKey').value = (s && s.llama_api_key) || '';
+        } catch (e) {}
+      };
+
+      const saveSettings = async () => {
+        const cfg = { 
+          out_dir: document.getElementById('outDir').value,
+          use_local_ai: false, // This is now controlled by individual tab checkboxes
+          llama_model: document.getElementById('llamaModel').value,
+          llama_temp: parseFloat(document.getElementById('llamaTemp').value) || 0.1,
+          llama_context: parseInt(document.getElementById('llamaContext').value) || 32000,
+          llama_api_key: document.getElementById('llamaAPIKey').value
+        };
+        const res = await App().SaveSettings(JSON.stringify(cfg));
+        document.getElementById('settingsInfo').textContent = 'Saved: ' + ((res && (res.out_dir || res.OutDir)) || '');
+      };
+
+      // Real Audio Spectrum Analyser using Backend Audio Data
+      class RealSpectrumAnalyser {
+        constructor(containerId, barCount = 32) {
+          this.container = document.getElementById(containerId);
+          this.barCount = barCount;
+          this.bars = [];
+          this.isActive = false;
+          this.animationId = null;
+          this.audioData = { loopback: [], microphone: [] };
+          this.isInitialized = false;
+          this.lastAudioUpdate = 0;
+          this.init();
+        }
+
+        async init() {
+          try {
+            // Create spectrum bars
+            for (let i = 0; i < this.barCount; i++) {
+              const bar = document.createElement('div');
+              bar.className = 'bg-gray-600 rounded-sm transition-all duration-50 ease-out';
+              bar.style.width = '8px';
+              bar.style.minHeight = '8px';
+              bar.style.maxHeight = '80px';
+              this.container.appendChild(bar);
+              this.bars.push(bar);
+            }
+            
+            // Set initial idle state
+            this.setIdleState();
+            
+            // Initialize Wails event listener for audio data
+            this.initializeAudioListener();
+            this.isInitialized = true;
+          } catch (error) {
+            console.error('Failed to initialize audio analyser:', error);
+            this.setIdleState();
+          }
+        }
+
+        initializeAudioListener() {
+          // Listen for audio data events from the Go backend
+          if (window.go && window.go.runtime && window.go.runtime.EventsOn) {
+            window.go.runtime.EventsOn("audioData", (data) => {
+              this.handleAudioData(data);
+            });
+          } else if (window.runtime && window.runtime.EventsOn) {
+            // Alternative Wails runtime binding
+            window.runtime.EventsOn("audioData", (data) => {
+              this.handleAudioData(data);
+            });
+          }
+        }
+
+        handleAudioData(data) {
+          if (!this.isActive || !data) return;
+
+          try {
+            const source = data.source;
+            
+            // Handle different data formats from Go backend
+            let samples = [];
+            
+            if (data.data instanceof ArrayBuffer) {
+              // Direct ArrayBuffer
+              samples = new Int16Array(data.data);
+            } else if (data.data instanceof Uint8Array) {
+              // Uint8Array - convert to Int16Array
+              samples = new Int16Array(data.data.buffer, data.data.byteOffset, data.data.byteLength / 2);
+            } else if (Array.isArray(data.data)) {
+              // Array of numbers
+              samples = new Int16Array(data.data);
+            } else if (typeof data.data === 'string') {
+              // Base64 encoded string - decode
+              try {
+                const binaryString = atob(data.data);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                samples = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2);
+              } catch (e) {
+                return;
+              }
+            } else {
+              return;
+            }
+            
+            // Store audio data for analysis
+            if (source === 'loopback') {
+              this.audioData.loopback = Array.from(samples);
+            } else if (source === 'microphone') {
+              this.audioData.microphone = Array.from(samples);
+            }
+            
+            this.lastAudioUpdate = Date.now();
+            
+            // Don't call updateSpectrum here - let the 60fps loop handle it
+          } catch (error) {
+            // Silent error handling for production
+          }
+        }
+
+        startRecording(withMic = true, dictation = false) {
+          this.isActive = true;
+          this.audioData = { loopback: [], microphone: [] };
+          this.lastAudioUpdate = Date.now();
+          
+          // Start the 60fps animation loop
+          this.animate();
+        }
+
+        stopRecording() {
+          this.isActive = false;
+          
+          if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+          }
+
+          // Clear audio data
+          this.audioData = { loopback: [], microphone: [] };
+
+          // Return to idle state
+          this.setIdleState();
+        }
+
+        setIdleState() {
+          // Create subtle breathing effect when idle
+          this.bars.forEach((bar, index) => {
+            const idleHeight = 8 + Math.sin(index * 0.3) * 3;
+            bar.style.height = idleHeight + 'px';
+            bar.className = 'bg-gray-600 rounded-sm transition-all duration-2000 ease-in-out';
+          });
+        }
+
+        updateSpectrum() {
+          if (!this.isActive) return;
+
+          // Combine loopback and microphone data
+          let combinedData = [];
+          
+          if (this.audioData.loopback.length > 0) {
+            combinedData = combinedData.concat(this.audioData.loopback);
+          }
+          
+          if (this.audioData.microphone.length > 0) {
+            combinedData = combinedData.concat(this.audioData.microphone);
+          }
+
+          // Check if we have recent audio data
+          const timeSinceAudio = Date.now() - this.lastAudioUpdate;
+          
+          if (combinedData.length === 0 || timeSinceAudio > 1000) {
+            // No audio data or stale data, use enhanced fallback animation
+            this.bars.forEach((bar, index) => {
+              const time = Date.now() * 0.001;
+              const height = 8 + Math.sin(time * 2 + index * 0.3) * 8; // More movement
+              bar.style.height = height + 'px';
+              bar.className = 'bg-gray-600 rounded-sm transition-all duration-50 ease-out';
+            });
+            return;
+          }
+
+          // Ultra-aggressive frequency analysis for maximum reactivity
+          this.bars.forEach((bar, index) => {
+            // Calculate energy in this frequency band
+            const bandStart = Math.floor((index / this.barCount) * combinedData.length);
+            const bandEnd = Math.floor(((index + 1) / this.barCount) * combinedData.length);
+            
+            let energy = 0;
+            for (let i = bandStart; i < bandEnd && i < combinedData.length; i++) {
+              energy += Math.abs(combinedData[i]);
+            }
+            
+            // Ultra-aggressive normalization for maximum sensitivity
+            const avgEnergy = energy / Math.max(1, bandEnd - bandStart);
+            
+            // Extremely sensitive normalization - bars will move with any sound
+            const normalizedEnergy = Math.min(1, avgEnergy / 1000); // 40x more sensitive than before
+            
+            // Aggressive exponential scaling for dramatic response
+            const scaledEnergy = Math.pow(normalizedEnergy, 0.3); // Very aggressive scaling
+            
+            // Maximum height range for dramatic movement
+            const height = Math.max(8, Math.min(80, 
+              8 + scaledEnergy * 72
+            ));
+            
+            bar.style.height = height + 'px';
+            
+            // Dynamic color based on audio intensity with enhanced sensitivity
+            const intensity = height / 80;
+            if (intensity > 0.7) {
+              bar.className = 'bg-gray-400 rounded-sm transition-all duration-50 ease-out';
+            } else if (intensity > 0.4) {
+              bar.className = 'bg-gray-500 rounded-sm transition-all duration-50 ease-out';
+            } else {
+              bar.className = 'bg-gray-600 rounded-sm transition-all duration-50 ease-out';
+            }
+          });
+        }
+
+        animate() {
+          if (!this.isActive) return;
+
+          // Always update spectrum at 60fps for smooth animation
+          this.updateSpectrum();
+
+          // Use requestAnimationFrame for consistent 60fps timing
+          this.animationId = requestAnimationFrame(() => this.animate());
+        }
+      }
+
+      // Global variables
+      let autoWav = '';
+      let toolsWav = '';
+      let toolsPickedWav = '';
+      let toolsPickedTxt = '';
+      let availablePrompts = [];
+      let selectedPrompt = 'meeting'; // Default prompt
+
+      // Auto Tab Event Handlers
+      document.getElementById('btnAutoStart').onclick = async () => {
+        const useMic = document.getElementById('autoWithMic').checked;
+        const dict = document.getElementById('autoDictation').checked;
+        autoWav = dict ? await App().StartRecordingAdvanced(useMic, true) : await App().StartRecording(useMic);
+        document.getElementById('autoLog').textContent = 'Recording to ' + autoWav + '\nClick Stop when ready.';
+        document.getElementById('btnAutoStart').disabled = true;
+        document.getElementById('btnAutoStop').disabled = false;
+        autoSpectrum.startRecording(useMic, dict);
+      };
+
+      document.getElementById('btnAutoStop').onclick = async () => {
+        document.getElementById('btnAutoStop').disabled = true;
+        const p = await App().StopRecording();
+        document.getElementById('autoLog').textContent = 'Saved: ' + p + '\nTranscribing...';
+        autoSpectrum.stopRecording();
+        
+        // Setup audio player
+        await setupAudioPlayer('audioPlayer', p);
+        document.getElementById('audioPlayerSection').classList.remove('hidden');
+        
+        try {
+          const txt = await App().Transcribe(p);
+          document.getElementById('autoLog').textContent = 'Saved: ' + p + '\nTranscribing...\nTranscribed: ' + txt + '\nSummarising...';
+          
+          // Update settings with current checkbox state
+          const useLocalAI = document.getElementById('autoLocalAI').checked;
+          const currentSettings = await App().GetSettings();
+          const updatedSettings = {
+            ...currentSettings,
+            use_local_ai: useLocalAI
+          };
+          await App().SaveSettings(JSON.stringify(updatedSettings));
+          
+          const msg = await App().Summarise(txt);
+          document.getElementById('autoLog').textContent = 'Saved: ' + p + '\nTranscribing...\nTranscribed: ' + txt + '\nSummarising...\nSummary written to: ' + txt.replace('.txt', '_summary.txt');
+          
+          // Render formatted output (only the summary content, not system messages)
+          renderMarkdown(msg, 'formattedOutput');
+          document.getElementById('formattedOutputSection').classList.remove('hidden');
+        } catch (e) {
+          document.getElementById('autoLog').textContent += '\nError: ' + e;
+        }
+        document.getElementById('btnAutoStart').disabled = false;
+      };
+
+      // Tools Tab Event Handlers
+      // Record section
+      document.getElementById('btnToolsStart').onclick = async () => {
+        const useMic = document.getElementById('toolsRecWithMic').checked;
+        const dict = document.getElementById('toolsRecDictation').checked;
+        toolsWav = dict ? await App().StartRecordingAdvanced(useMic, true) : await App().StartRecording(useMic);
+        document.getElementById('toolsRecStatus').textContent = 'Recording to ' + toolsWav;
+        document.getElementById('btnToolsStart').disabled = true;
+        document.getElementById('btnToolsStop').disabled = false;
+      };
+
+      document.getElementById('btnToolsStop').onclick = async () => {
+        const p = await App().StopRecording();
+        document.getElementById('toolsRecStatus').textContent = 'Saved: ' + p;
+        document.getElementById('btnToolsStart').disabled = false;
+        document.getElementById('btnToolsStop').disabled = true;
+        
+        // Setup audio player
+        await setupAudioPlayer('toolsAudioPlayer', p);
+        document.getElementById('toolsAudioPlayerSection').classList.remove('hidden');
+      };
+
+      // Transcribe section
+      document.getElementById('btnToolsPickWav').onclick = async () => {
+        const f = await App().PickWavFromOutDir();
+        if (f) { 
+          toolsPickedWav = f; 
+          document.getElementById('toolsPickedWav').textContent = f; 
+          document.getElementById('btnToolsTranscribe').disabled = false;
+          
+          // Setup audio player
+          await setupAudioPlayer('toolsTranscribeAudioPlayer', f);
+          document.getElementById('toolsTranscribeAudioPlayerSection').classList.remove('hidden');
+        }
+      };
+
+      document.getElementById('btnToolsTranscribe').onclick = async () => {
+        document.getElementById('toolsTranscribeLog').textContent = 'Transcribing...';
+        try {
+          const txt = await App().Transcribe(toolsPickedWav);
+          document.getElementById('toolsTranscribeLog').textContent = 'Transcribed: ' + txt;
+          
+          // Read the transcript content and render it
+          try {
+            const response = await fetch('file:///' + txt.replace(/\\/g, '/'));
+            const transcriptContent = await response.text();
+            renderMarkdown(transcriptContent, 'toolsFormattedOutput');
+          } catch (fetchError) {
+            // Fallback: just show the file path
+            renderMarkdown('Transcript saved to: ' + txt, 'toolsFormattedOutput');
+          }
+          document.getElementById('toolsFormattedOutputSection').classList.remove('hidden');
+        } catch (e) {
+          document.getElementById('toolsTranscribeLog').textContent = 'Error: ' + e;
+        }
+      };
+
+      // Summarise section
+      document.getElementById('btnToolsPickTxt').onclick = async () => {
+        const f = await App().PickTxtFromOutDir();
+        if (f) { 
+          toolsPickedTxt = f; 
+          document.getElementById('toolsPickedTxt').textContent = f; 
+          document.getElementById('btnToolsSummarise').disabled = false; 
+        }
+      };
+
+      document.getElementById('btnToolsSummarise').onclick = async () => {
+        document.getElementById('toolsSummariseLog').textContent = 'Summarising...';
+        try {
+          // Update settings with current checkbox state
+          const useLocalAI = document.getElementById('toolsSummariseLocalAI').checked;
+          const currentSettings = await App().GetSettings();
+          const updatedSettings = {
+            ...currentSettings,
+            use_local_ai: useLocalAI
+          };
+          await App().SaveSettings(JSON.stringify(updatedSettings));
+          
+          const msg = await App().Summarise(toolsPickedTxt);
+          document.getElementById('toolsSummariseLog').textContent = 'Summary written to: ' + toolsPickedTxt.replace('.txt', '_summary.txt');
+          
+          // Render formatted output (only the summary content, not system messages)
+          renderMarkdown(msg, 'toolsFormattedOutput');
+          document.getElementById('toolsFormattedOutputSection').classList.remove('hidden');
+        } catch (e) {
+          document.getElementById('toolsSummariseLog').textContent = 'Error: ' + e;
+        }
+      };
+
+      // Settings
+      document.getElementById('btnSaveSettings').onclick = saveSettings;
+      
+      // Model picker
+      document.getElementById('btnPickModel').onclick = async () => {
+        try {
+          const modelPath = await App().PickModelFile();
+          if (modelPath) {
+            document.getElementById('llamaModel').value = modelPath;
+          }
+        } catch (e) {
+          console.error('Failed to pick model:', e);
+        }
+      };
+
+      // Initialize spectrum analyser for auto tab
+      const autoSpectrum = new RealSpectrumAnalyser('autoSpectrum');
+
+      // Prompt dropdown event listeners
+      document.getElementById('autoPromptSelect').addEventListener('change', (e) => {
+        setSelectedPrompt(e.target.value);
+      });
+
+      document.getElementById('toolsPromptSelect').addEventListener('change', (e) => {
+        setSelectedPrompt(e.target.value);
+      });
+
+      // Tab switching
+      document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => setActive(tab.dataset.tab)));
+
+      // Initialize
+      loadSettings();
+      loadPrompts();
+    </script>
+  </body>
+</html>
