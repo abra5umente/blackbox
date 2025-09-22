@@ -10,17 +10,18 @@ A Windows-only meeting & dictation recorder, featuring local transcription, and 
 - **Real-time Audio Capture**: WASAPI loopback for system audio + optional microphone input
 - **Live Spectrum Analyser**: Real-time visualisation of audio activity in the GUI
 - **High-Quality Transcription**: whisper.cpp integration with multiple model support
-- **Summarisation**: Use any OpenAI compatible API endpoint (instructions included for local [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master) usage)
+- **AI-Powered Summarisation**: Use any OpenAI compatible API endpoint (instructions included for local [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master) usage)
+- **Secure Audio Playback**: In-GUI audio players for listening to recorded WAV files
+- **Formatted Output**: Beautiful markdown rendering for transcripts and summaries
 - **Modern GUI**: Clean, responsive Wails-based interface with Tailwind CSS styling
 - **Audio Mixing**: User-selectable combinations of system and microphone audio
 - **Flexible Output**: Configurable output directories and file naming
 
-The GUI exposes the following functions:
-- **Record Tab**: Audio capture with real-time spectrum analyser visualisation
-- **Transcribe Tab**: WAV file selection and transcription processing
-- **Record & Transcribe & Summarise Tab**: Combined workflow with live audio feedback
-- **Summarise Tab**: Transcript processing and AI-powered summarisation
-- **Settings Tab**: Configuration management
+The GUI features a streamlined interface with three main tabs:
+
+- **Auto Tab**: Complete workflow combining recording, transcription, and summarisation with live audio feedback and formatted output
+- **Tools Tab**: Individual tools for recording, transcribing, and summarising with audio playback and formatted output
+- **Settings Tab**: Configuration management including local AI settings
 
 ## Quick Start
 
@@ -83,8 +84,8 @@ Use your own hardware for private, offline summarisation with llama.cpp models.
 #### Usage
 1. **Configure local AI settings** in the Settings tab
 2. **Enable local AI** by checking "Local AI summarisation" in:
-   - **Summarise tab**: For individual transcript processing
-   - **Record & Transcribe & Summarise tab**: For automatic summarisation after recording
+   - **Tools tab Summarise section**: For individual transcript processing
+   - **Auto tab**: For automatic summarisation after recording
 3. **Start summarisation**: llama-server will automatically start, process your transcript, then shut down
 
 #### Configuration Files
@@ -112,15 +113,15 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
    - Any OpenAI-compatible API
 
 #### Usage
-1. **Leave "Local AI summarisation" unchecked** in the relevant tabs
+1. **Leave "Local AI summarisation" unchecked** in the Auto tab or Tools tab Summarise section
 2. **Start summarisation**: Requests will be sent to your configured remote endpoint
 3. **No local processes**: Everything runs in the cloud
 
 ### Switching Between Local and Remote
 
-- **Per-operation control**: Each tab has its own "Local AI summarisation" checkbox
+- **Per-operation control**: Each section has its own "Local AI summarisation" checkbox
 - **Independent settings**: Local and remote configurations are completely separate
-- **No conflicts**: You can use local AI in one tab and remote AI in another
+- **No conflicts**: You can use local AI in one section and remote AI in another
 - **Automatic cleanup**: Local llama-server shuts down after each use
 
 ### Configuration Examples
@@ -173,16 +174,24 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 
 ### Recording with automatic summary
 1. Open Blackbox
-2. Click on "Record & Transcribe & Summarise
+2. Click on the **Auto** tab
 3. Select which mode you want to record in (desktop only (untick Use Microphone), desktop + microphone, or microphone only (dictation mode))
 4. Begin your meeting/dictation
-5. Once done, click "Stop Recording."
-6. The application will automatically transcribe + summarise your recording.
+5. Once done, click "Stop Recording"
+6. The application will automatically transcribe + summarise your recording
+7. Listen to your recording using the built-in audio player
+8. View formatted output in the dedicated markdown section
 
 ### Advanced Recording Modes
 - **Loopback Only**: System audio capture with spectrum visualisation
 - **Loopback + Mic**: Mixed audio with dual-source spectrum analysis
 - **Dictation Mode**: Microphone-only with mic-focused visualisation
+
+### UI Features
+- **Audio Playback**: Listen to recorded WAV files directly in the GUI using secure data URLs
+- **Formatted Output**: Transcripts and summaries are rendered as beautiful markdown
+- **System Messages**: Clear status updates separate from formatted content
+- **Real-time Feedback**: Live spectrum analyser shows audio activity during recording
 
 ## Troubleshooting
 
@@ -191,6 +200,8 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 2. **Spectrum Analyser Not Moving**: Ensure audio is playing and recording is active, ensure you are using the correct audio interface in Windows settings
 3. **Whisper Errors**: Verify binary path and model existence, refer to [whisper-cli](https://github.com/ggml-org/whisper.cpp)
 4. **GUI Not Responding**: Ensure WebView2 runtime is installed
+5. **Audio Playback Not Working**: Check browser console for errors, verify WAV file exists
+6. **Markdown Not Rendering**: Ensure internet connection for marked.js CDN, check browser console
 
 ## Future Enhancements
 

@@ -1,8 +1,8 @@
 {
   "out_dir": "./out",
   "use_local_ai": true,
-  "llama_temp": 0.6,
-  "llama_context": 32000,
-  "llama_model": "C:\\Users\\alexa\\programming\\projects\\blackbox\\models\\gemma-3-12b-it-q4_0.gguf",
+  "llama_temp": 0.1,
+  "llama_context": 16000,
+  "llama_model": "C:\\Users\\alexa\\programming\\projects\\blackbox\\models\\gemma-3-4b-it-q4_0.gguf",
   "llama_api_key": "1234"
 }

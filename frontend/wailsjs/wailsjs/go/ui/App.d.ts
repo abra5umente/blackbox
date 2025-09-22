@@ -3,6 +3,8 @@
 import {ui} from '../models';
 import {context} from '../models';
 
+export function GetAudioDataURL(arg1:string):Promise<string>;
+
 export function GetSettings():Promise<ui.UISettings>;
 
 export function IsRecording():Promise<boolean>;
