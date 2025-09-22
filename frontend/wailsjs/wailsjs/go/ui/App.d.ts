@@ -5,6 +5,12 @@ import {context} from '../models';
 
 export function GetAudioDataURL(arg1:string):Promise<string>;
 
+export function GetAvailablePrompts():Promise<Array<ui.PromptConfig>>;
+
+export function GetPromptConfig(arg1:string):Promise<ui.PromptConfig>;
+
+export function GetSelectedPrompt():Promise<string>;
+
 export function GetSettings():Promise<ui.UISettings>;
 
 export function IsRecording():Promise<boolean>;
@@ -15,7 +21,11 @@ export function PickTxtFromOutDir():Promise<string>;
 
 export function PickWavFromOutDir():Promise<string>;
 
+export function SaveCustomPrompt(arg1:ui.PromptConfig):Promise<void>;
+
 export function SaveSettings(arg1:string):Promise<ui.UISettings>;
+
+export function SetSelectedPrompt(arg1:string):Promise<void>;
 
 export function SetUIContext(arg1:context.Context):Promise<void>;
 

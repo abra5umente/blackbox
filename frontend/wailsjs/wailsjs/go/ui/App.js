@@ -6,6 +6,18 @@ export function GetAudioDataURL(arg1) {
   return window['go']['ui']['App']['GetAudioDataURL'](arg1);
 }
 
+export function GetAvailablePrompts() {
+  return window['go']['ui']['App']['GetAvailablePrompts']();
+}
+
+export function GetPromptConfig(arg1) {
+  return window['go']['ui']['App']['GetPromptConfig'](arg1);
+}
+
+export function GetSelectedPrompt() {
+  return window['go']['ui']['App']['GetSelectedPrompt']();
+}
+
 export function GetSettings() {
   return window['go']['ui']['App']['GetSettings']();
 }
@@ -26,8 +38,16 @@ export function PickWavFromOutDir() {
   return window['go']['ui']['App']['PickWavFromOutDir']();
 }
 
+export function SaveCustomPrompt(arg1) {
+  return window['go']['ui']['App']['SaveCustomPrompt'](arg1);
+}
+
 export function SaveSettings(arg1) {
   return window['go']['ui']['App']['SaveSettings'](arg1);
+}
+
+export function SetSelectedPrompt(arg1) {
+  return window['go']['ui']['App']['SetSelectedPrompt'](arg1);
 }
 
 export function SetUIContext(arg1) {
