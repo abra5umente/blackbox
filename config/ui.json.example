@@ -1,0 +1,8 @@
+{
+  "out_dir": "./out",
+  "use_local_ai": false,
+  "llama_temp": 0.1,
+  "llama_context": 16000,
+  "llama_model": "",
+  "llama_api_key": ""
+}
