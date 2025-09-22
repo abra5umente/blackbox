@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -816,4 +817,24 @@ func (a *App) isLlamaServerRunning() bool {
 	defer resp.Body.Close()
 
 	return resp.StatusCode == 200
+}
+
+// GetAudioDataURL returns a base64-encoded data URL for the given WAV file
+func (a *App) GetAudioDataURL(wavPath string) (string, error) {
+	// Check if file exists
+	if _, err := os.Stat(wavPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("audio file not found: %s", wavPath)
+	}
+
+	// Read the file
+	fileData, err := os.ReadFile(wavPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read audio file: %v", err)
+	}
+
+	// Encode as base64
+	base64Data := base64.StdEncoding.EncodeToString(fileData)
+
+	// Return as data URL
+	return "data:audio/wav;base64," + base64Data, nil
 }
