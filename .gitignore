@@ -24,11 +24,11 @@ Desktop.ini
 .envrc
 /configs/*.json*
 
+
 ###############################
 # Go build/cache
 ###############################
 bin/
-dist/
 build/
 *.exe
 *.exe~
@@ -54,8 +54,13 @@ llamacpp-bin/*
 frontend/dist/output.css
 frontend/dist/*.css.map
 
+
 # Node modules (if not using npm workspaces)
-*node_modules/
+node_modules/
+**/node_modules/
+
+# User-specific configuration files
+config/ui.json
 
 ###############################
 # Logs
