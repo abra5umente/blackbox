@@ -2,8 +2,7 @@
 
 A Windows-only meeting & dictation recorder, featuring local transcription, and automatic summarisation.
 
-<img width="1002" height="708" alt="image" src="https://github.com/user-attachments/assets/2e155ac5-025f-4301-8185-b97f1b0ebc5a" />  
-
+<img width="1005" height="1207" alt="image" src="https://github.com/user-attachments/assets/6db8f51d-30df-4f22-9800-3ffd65a88aa3" />  
 
 ## Features
 
@@ -12,8 +11,8 @@ A Windows-only meeting & dictation recorder, featuring local transcription, and 
 - **High-Quality Transcription**: whisper.cpp integration with multiple model support
 - **AI-Powered Summarisation**: Use any OpenAI compatible API endpoint (instructions included for local [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master) usage)
 - **Secure Audio Playback**: In-GUI audio players for listening to recorded WAV files
-- **Formatted Output**: Beautiful markdown rendering for transcripts and summaries
-- **Modern GUI**: Clean, responsive Wails-based interface with Tailwind CSS styling
+- **Formatted Output**: Markdown rendering for transcripts and summaries
+- **Small Footprint**: Less than 15mb executable  
 - **Audio Mixing**: User-selectable combinations of system and microphone audio
 - **Flexible Output**: Configurable output directories and file naming
 
@@ -126,7 +125,7 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 
 ### Configuration Examples
 
-#### Local AI Setup (`./configs/local.json`)
+#### Local AI Client Setup (`./configs/local.json`)
 ```json
 {
   "base_url": "http://localhost:8080",
@@ -135,7 +134,7 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 }
 ```
 
-#### Remote AI Setup (`./configs/remote.json`)
+#### Remote AI Client Setup (`./configs/remote.json`)
 ```json
 {
   "base_url": "https://api.openai.com/v1",
@@ -144,7 +143,7 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 }
 ```
 
-#### GUI Settings (Local AI Parameters)
+#### App Settings (+ Local AI Server Parameters) (`./configs/ui.json)
 ```json
 {
   "out_dir": "./out",
