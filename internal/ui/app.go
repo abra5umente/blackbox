@@ -24,6 +24,13 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// PromptConfig represents a summarisation prompt configuration
+type PromptConfig struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Prompt      string `json:"prompt"`
+}
+
 // App exposes methods to the Wails frontend.
 type App struct {
 	settings *SettingsStore
@@ -44,6 +51,11 @@ type App struct {
 	llamaServer *exec.Cmd
 	llamaMu     sync.Mutex
 
+	// Prompt management
+	selectedPrompt string
+	promptCache    map[string]PromptConfig
+	promptMu       sync.RWMutex
+
 	uiCtx context.Context
 }
 
@@ -56,7 +68,19 @@ func NewApp(settingsPath string) (*App, error) {
 	if err := os.MkdirAll(s.OutDir, 0755); err != nil {
 		return nil, err
 	}
-	return &App{settings: store}, nil
+
+	app := &App{
+		settings:       store,
+		selectedPrompt: "meeting", // Default to meeting prompt
+		promptCache:    make(map[string]PromptConfig),
+	}
+
+	// Load default prompts
+	if err := app.loadDefaultPrompts(); err != nil {
+		return nil, fmt.Errorf("failed to load default prompts: %w", err)
+	}
+
+	return app, nil
 }
 
 // --- Settings API ---
@@ -80,6 +104,150 @@ func (a *App) SaveSettings(jsonStr string) (UISettings, error) {
 		return UISettings{}, err
 	}
 	return a.settings.Get(), nil
+}
+
+// --- Prompt Management API ---
+
+// GetAvailablePrompts returns a list of available prompt configurations
+func (a *App) GetAvailablePrompts() ([]PromptConfig, error) {
+	a.promptMu.RLock()
+	defer a.promptMu.RUnlock()
+
+	// Load custom prompts from config directory
+	if err := a.loadCustomPrompts(); err != nil {
+		// Log error but don't fail - custom prompts are optional
+		fmt.Printf("Warning: failed to load custom prompts: %v\n", err)
+	}
+
+	var prompts []PromptConfig
+	for _, prompt := range a.promptCache {
+		prompts = append(prompts, prompt)
+	}
+
+	return prompts, nil
+}
+
+// GetSelectedPrompt returns the currently selected prompt name
+func (a *App) GetSelectedPrompt() string {
+	a.promptMu.RLock()
+	defer a.promptMu.RUnlock()
+	return a.selectedPrompt
+}
+
+// SetSelectedPrompt sets the currently selected prompt
+func (a *App) SetSelectedPrompt(promptName string) error {
+	a.promptMu.Lock()
+	defer a.promptMu.Unlock()
+
+	// Check if prompt exists
+	if _, exists := a.promptCache[promptName]; !exists {
+		return fmt.Errorf("prompt '%s' not found", promptName)
+	}
+
+	a.selectedPrompt = promptName
+	return nil
+}
+
+// GetPromptConfig returns the configuration for a specific prompt
+func (a *App) GetPromptConfig(promptName string) (PromptConfig, error) {
+	a.promptMu.RLock()
+	defer a.promptMu.RUnlock()
+
+	prompt, exists := a.promptCache[promptName]
+	if !exists {
+		return PromptConfig{}, fmt.Errorf("prompt '%s' not found", promptName)
+	}
+
+	return prompt, nil
+}
+
+// SaveCustomPrompt saves a custom prompt configuration
+func (a *App) SaveCustomPrompt(config PromptConfig) error {
+	if config.Name == "" {
+		return errors.New("prompt name is required")
+	}
+
+	// Ensure config directory exists
+	if err := os.MkdirAll("./config", 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// Save to file
+	filename := fmt.Sprintf("./config/%s.json", config.Name)
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal prompt config: %w", err)
+	}
+
+	if err := os.WriteFile(filename, data, 0644); err != nil {
+		return fmt.Errorf("failed to write prompt file: %w", err)
+	}
+
+	// Update cache
+	a.promptMu.Lock()
+	a.promptCache[config.Name] = config
+	a.promptMu.Unlock()
+
+	return nil
+}
+
+// loadDefaultPrompts loads the built-in prompt configurations
+func (a *App) loadDefaultPrompts() error {
+	defaultPrompts := []string{"meeting", "dictation"}
+
+	for _, promptName := range defaultPrompts {
+		filename := fmt.Sprintf("./config/%s.json", promptName)
+		data, err := os.ReadFile(filename)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", filename, err)
+		}
+
+		var config PromptConfig
+		if err := json.Unmarshal(data, &config); err != nil {
+			return fmt.Errorf("failed to parse %s: %w", filename, err)
+		}
+
+		a.promptCache[promptName] = config
+	}
+
+	return nil
+}
+
+// loadCustomPrompts loads custom prompt files from the config directory
+func (a *App) loadCustomPrompts() error {
+	configDir := "./config"
+	entries, err := os.ReadDir(configDir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		// Skip default prompts
+		if entry.Name() == "meeting.json" || entry.Name() == "dictation.json" {
+			continue
+		}
+
+		filename := filepath.Join(configDir, entry.Name())
+		data, err := os.ReadFile(filename)
+		if err != nil {
+			continue // Skip files that can't be read
+		}
+
+		var config PromptConfig
+		if err := json.Unmarshal(data, &config); err != nil {
+			continue // Skip files that can't be parsed
+		}
+
+		// Use filename without extension as key
+		promptName := strings.TrimSuffix(entry.Name(), ".json")
+		a.promptCache[promptName] = config
+	}
+
+	return nil
 }
 
 // --- Recording API ---
@@ -196,45 +364,12 @@ func (a *App) Summarise(txtPath string) (string, error) {
 		return "", fmt.Errorf("failed to read transcript: %w", err)
 	}
 
-	// Create the summarisation prompt
-	prompt := `You are a specialised transcript summariser. Your ONLY purpose is to read meeting transcripts
-and produce comprehensive, well-structured summaries. You are verbose, detailed, and explanatory,
-but still clear and readable. Never invent facts, names, or dates—if information is missing,
-write "Unknown." Always use Australian spelling.
-
-Instructions:
-- Write in Markdown with clear headings and subheadings.
-- Begin with an **Executive Summary**: 5–8 bullets that describe the meeting's purpose,
-  key themes, overall tone, and main outcomes in slightly more detail than a brief recap.
-- Create **Dynamic Thematic Sections**:
-  • Identify 3–6 dominant themes in the transcript.  
-  • For each theme, create a heading (≤6 words) that reflects the content.  
-  • Under each heading, write 3–6 bullets that capture facts, reasoning, and context
-    (not just short fragments). Each bullet should be 1–3 sentences.  
-- Provide **Decisions & Rationale**:
-  • List all decisions made, who agreed (if stated), and when they take effect.  
-  • Include short explanations of why the decision was made, if mentioned.  
-- Provide **Action Items**:
-  • Use a table: Owner | Action | Due (if stated) | Priority (H/M/L).  
-  • Add 1–2 sentence descriptions for context beneath each action item if needed.  
-- Provide **Risks / Blockers**:
-  • For each, include Risk, Impact, Mitigation (if given), and Confidence (High/Med/Low).  
-  • Expand with a sentence of explanation for clarity.  
-- Provide **Open Questions**:
-  • List unresolved issues or uncertainties. Include context if available.  
-- Provide **Per-Speaker Highlights** (optional):
-  • If distinct speakers are clear, summarise each speaker's key contributions.  
-  • Use "Speaker A / Speaker B" if no names are provided.  
-- Provide **Notable Quotes**:
-  • Select 2–4 direct quotes that highlight tone, attitude, or memorable phrasing.  
-- End with **Next Steps / Follow-ups**:
-  • 3–5 bullets describing agreed future work or items to revisit.  
-
-Style:
-- Be descriptive and explanatory. Expand on reasoning where visible in the transcript.
-- Each bullet can be 2–3 sentences if needed; clarity and completeness matter more than brevity.
-- Avoid fluff, but don't oversimplify—capture nuance and context.
-- Never output anything except the summary.`
+	// Get the selected prompt configuration
+	promptConfig, err := a.GetPromptConfig(a.GetSelectedPrompt())
+	if err != nil {
+		return "", fmt.Errorf("failed to get prompt config: %w", err)
+	}
+	prompt := promptConfig.Prompt
 
 	var summary string
 
