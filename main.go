@@ -19,6 +19,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("init app: %v", err)
 	}
+	defer func() {
+		if closeErr := app.Close(); closeErr != nil {
+			log.Printf("error closing app: %v", closeErr)
+		}
+	}()
+
 	err = wails.Run(&options.App{
 		Title:            "Blackbox",
 		Width:            1024,

@@ -11,6 +11,9 @@ import (
 // UISettings holds configurable UI preferences.
 type UISettings struct {
 	OutDir string `json:"out_dir"`
+	// Database settings
+	DatabasePath      string `json:"database_path"`
+	EnableFileBackups bool   `json:"enable_file_backups"`
 	// Local AI settings
 	UseLocalAI   bool    `json:"use_local_ai"`
 	LlamaTemp    float64 `json:"llama_temp"`
@@ -45,12 +48,14 @@ func (s *SettingsStore) load() error {
 	if _, err := os.Stat(s.path); err != nil {
 		// Default settings
 		s.settings = UISettings{
-			OutDir:       "./out",
-			UseLocalAI:   false,
-			LlamaTemp:    0.1,
-			LlamaContext: 32000,
-			LlamaModel:   "",
-			LlamaAPIKey:  "",
+			OutDir:            "./out",
+			DatabasePath:      "./data/blackbox.db",
+			EnableFileBackups: true,
+			UseLocalAI:        false,
+			LlamaTemp:         0.1,
+			LlamaContext:      32000,
+			LlamaModel:        "",
+			LlamaAPIKey:       "",
 		}
 		// Ensure directory exists for first save
 		_ = os.MkdirAll(filepath.Dir(s.path), 0755)
@@ -84,6 +89,9 @@ func (s *SettingsStore) Save(newSettings UISettings) error {
 	defer s.mu.Unlock()
 	if newSettings.OutDir == "" {
 		newSettings.OutDir = "./out"
+	}
+	if newSettings.DatabasePath == "" {
+		newSettings.DatabasePath = "./data/blackbox.db"
 	}
 	// Set defaults for new fields if not present
 	if newSettings.LlamaTemp == 0 {

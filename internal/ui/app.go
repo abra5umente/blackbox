@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"blackbox/internal/audio"
+	"blackbox/internal/db"
 	"blackbox/internal/execx"
 	"blackbox/internal/wav"
 
@@ -34,10 +35,12 @@ type PromptConfig struct {
 // App exposes methods to the Wails frontend.
 type App struct {
 	settings *SettingsStore
+	database *db.DB
 
 	mu          sync.Mutex
 	recording   bool
 	dictation   bool
+	recordingID int
 	rec         *audio.Recorder
 	mic         *audio.MicRecorder
 	writer      *wav.Writer
@@ -69,8 +72,15 @@ func NewApp(settingsPath string) (*App, error) {
 		return nil, err
 	}
 
+	// Initialize database
+	database, err := db.NewDB(s.DatabasePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize database: %w", err)
+	}
+
 	app := &App{
 		settings:       store,
+		database:       database,
 		selectedPrompt: "meeting", // Default to meeting prompt
 		promptCache:    make(map[string]PromptConfig),
 	}
@@ -81,6 +91,14 @@ func NewApp(settingsPath string) (*App, error) {
 	}
 
 	return app, nil
+}
+
+// Close closes the database connection and cleans up resources
+func (a *App) Close() error {
+	if a.database != nil {
+		return a.database.Close()
+	}
+	return nil
 }
 
 // --- Settings API ---
@@ -97,9 +115,34 @@ func (a *App) SaveSettings(jsonStr string) (UISettings, error) {
 	if cfg.OutDir == "" {
 		cfg.OutDir = "./out"
 	}
+	if cfg.DatabasePath == "" {
+		cfg.DatabasePath = "./data/blackbox.db"
+	}
+
+	// Create output directory
 	if err := os.MkdirAll(cfg.OutDir, 0755); err != nil {
 		return UISettings{}, err
 	}
+
+	// Check if database path changed and handle database migration
+	currentSettings := a.settings.Get()
+	if currentSettings.DatabasePath != cfg.DatabasePath {
+		// Close current database connection
+		if a.database != nil {
+			if err := a.database.Close(); err != nil {
+				return UISettings{}, fmt.Errorf("failed to close current database: %w", err)
+			}
+		}
+
+		// Create new database connection
+		newDB, err := db.NewDB(cfg.DatabasePath)
+		if err != nil {
+			return UISettings{}, fmt.Errorf("failed to open new database: %w", err)
+		}
+		a.database = newDB
+	}
+
+	// Save settings
 	if err := a.settings.Save(cfg); err != nil {
 		return UISettings{}, err
 	}
@@ -316,6 +359,33 @@ func (a *App) StopRecording() (string, error) {
 	if err := writer.Close(); err != nil {
 		return wavPath, fmt.Errorf("finalize wav: %w", err)
 	}
+
+	// Get final file size
+	fileInfo, err := os.Stat(wavPath)
+	if err != nil {
+		return wavPath, fmt.Errorf("stat wav file: %w", err)
+	}
+
+	// Calculate duration based on file size and audio format
+	// PCM S16LE, 16kHz, mono: 2 bytes per sample, 16000 samples per second
+	durationSeconds := float64(fileInfo.Size()) / (16000.0 * 2.0)
+
+	// Update recording in database
+	dbRecording, err := a.database.GetRecording(a.recordingID)
+	if err != nil {
+		return wavPath, fmt.Errorf("failed to get recording from database: %w", err)
+	}
+
+	dbRecording.FileSize = fileInfo.Size()
+	dbRecording.DurationSeconds = &durationSeconds
+
+	if err := a.database.UpdateRecording(dbRecording); err != nil {
+		return wavPath, fmt.Errorf("failed to update recording in database: %w", err)
+	}
+
+	// Clear recording ID
+	a.recordingID = 0
+
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		return wavPath, runErr
 	}
@@ -340,28 +410,82 @@ func (a *App) Transcribe(wavPath string) (string, error) {
 	modelDir := getenvDefault("LOOPBACK_NOTES_MODELS", "./models")
 	modelPath := filepath.Join(modelDir, "ggml-base.en.bin")
 
+	startTime := time.Now()
 	txtPath, err := execx.RunWhisper(whisperBin, modelPath, wavPath, outDir, "en", 0, "")
 	if err != nil {
 		return "", err
 	}
+
+	// Read transcript content
+	transcriptContent, err := os.ReadFile(txtPath)
+	if err != nil {
+		return txtPath, fmt.Errorf("failed to read transcript file: %w", err)
+	}
+
+	// Find recording by filename
+	filename := filepath.Base(wavPath)
+	dbRecording, err := a.database.GetRecordingByFilename(filename)
+	if err != nil {
+		return txtPath, fmt.Errorf("failed to find recording in database: %w", err)
+	}
+
+	// Calculate processing time
+	processingTimeSeconds := time.Since(startTime).Seconds()
+
+	// Create transcript in database
+	dbTranscript := &db.Transcript{
+		RecordingID:           dbRecording.ID,
+		Content:               string(transcriptContent),
+		ModelUsed:             "ggml-base.en",
+		Language:              "en",
+		ProcessingTimeSeconds: &processingTimeSeconds,
+	}
+
+	if err := a.database.CreateTranscript(dbTranscript); err != nil {
+		return txtPath, fmt.Errorf("failed to save transcript to database: %w", err)
+	}
+
 	return txtPath, nil
 }
 
 // Summarise reads configs/llm.json and sends the transcript to OpenAI or local AI for summarisation.
-func (a *App) Summarise(txtPath string) (string, error) {
-	if strings.TrimSpace(txtPath) == "" {
-		return "", errors.New("txt path required")
-	}
-	if _, err := os.Stat(txtPath); err != nil {
-		return "", err
+func (a *App) Summarise(txtPathOrID string) (string, error) {
+	if strings.TrimSpace(txtPathOrID) == "" {
+		return "", errors.New("txt path or recording ID required")
 	}
 
 	uiCfg := a.settings.Get()
 
-	// Read the transcript file
-	transcript, err := os.ReadFile(txtPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read transcript: %w", err)
+	var transcript string
+	var err error
+
+	// Check if it's a file path (for backwards compatibility)
+	if _, err := os.Stat(txtPathOrID); err == nil {
+		// It's a file path, read from file
+		transcriptBytes, err := os.ReadFile(txtPathOrID)
+		if err != nil {
+			return "", fmt.Errorf("failed to read transcript: %w", err)
+		}
+		transcript = string(transcriptBytes)
+	} else {
+		// Try to parse as recording ID
+		var recordingID int
+		if _, parseErr := fmt.Sscanf(txtPathOrID, "%d", &recordingID); parseErr == nil {
+			// It's a recording ID, get transcript from database
+			recording, dbErr := a.database.GetRecording(recordingID)
+			if dbErr != nil {
+				return "", fmt.Errorf("failed to get recording from database: %v", dbErr)
+			}
+
+			// Get the transcript for this recording
+			dbTranscript, transErr := a.database.GetTranscriptByRecordingID(recording.ID)
+			if transErr != nil {
+				return "", fmt.Errorf("failed to get transcript from database: %v", transErr)
+			}
+			transcript = dbTranscript.Content
+		} else {
+			return "", fmt.Errorf("invalid file path or recording ID: %s", txtPathOrID)
+		}
 	}
 
 	// Get the selected prompt configuration
@@ -375,7 +499,7 @@ func (a *App) Summarise(txtPath string) (string, error) {
 
 	if uiCfg.UseLocalAI {
 		// Use local AI (llama.cpp) - load from local.json
-		summary, err = a.summariseWithLocalAI(string(transcript), prompt)
+		summary, err = a.summariseWithLocalAI(transcript, prompt)
 		if err != nil {
 			return "", fmt.Errorf("local AI summarisation failed: %w", err)
 		}
@@ -413,13 +537,82 @@ func (a *App) Summarise(txtPath string) (string, error) {
 		}
 	}
 
-	// Write summary to output file
-	outputPath := strings.TrimSuffix(txtPath, filepath.Ext(txtPath)) + "_summary.txt"
-	if err := os.WriteFile(outputPath, []byte(summary), 0644); err != nil {
-		return "", fmt.Errorf("failed to write summary: %w", err)
+	// Find transcript by filename (only if it's a file path)
+	var dbRecording *db.Recording
+	var transcriptErr error
+
+	if _, err := os.Stat(txtPathOrID); err == nil {
+		// It's a file path
+		txtFilename := filepath.Base(txtPathOrID)
+		wavFilename := strings.TrimSuffix(txtFilename, ".txt") + ".wav"
+		dbRecording, transcriptErr = a.database.GetRecordingByFilename(wavFilename)
+		if transcriptErr != nil {
+			return "", fmt.Errorf("failed to find recording: %w", transcriptErr)
+		}
+	} else {
+		// It's a recording ID, we already have the recording from earlier
+		// dbRecording should already be set from the earlier database lookup
+		if dbRecording == nil {
+			return "", fmt.Errorf("recording not found for ID: %s", txtPathOrID)
+		}
 	}
 
-	return fmt.Sprintf("Summary written to: %s\n\n--- Summary ---\n%s", outputPath, summary), nil
+	// Get transcript
+	dbTranscript, err := a.database.GetTranscriptByRecordingID(dbRecording.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to find transcript in database: %w", err)
+	}
+
+	// Determine model used and endpoint
+	modelUsed := "unknown"
+	var apiEndpoint *string
+	var localModelPath *string
+
+	if uiCfg.UseLocalAI {
+		modelUsed = "llama-local"
+		localModelPath = &uiCfg.LlamaModel
+	} else {
+		cfg, _ := a.loadLLMConfig("./configs/remote.json")
+		if cfg != nil {
+			modelUsed = cfg.Model
+			apiEndpoint = &cfg.BaseURL
+		}
+	}
+
+	// Create summary in database
+	dbSummary := &db.Summary{
+		TranscriptID:   dbTranscript.ID,
+		Content:        summary,
+		SummaryType:    a.GetSelectedPrompt(),
+		ModelUsed:      modelUsed,
+		PromptUsed:     prompt,
+		APIEndpoint:    apiEndpoint,
+		LocalModelPath: localModelPath,
+	}
+
+	if err := a.database.CreateSummary(dbSummary); err != nil {
+		return "", fmt.Errorf("failed to save summary to database: %w", err)
+	}
+
+	// Write summary to output file if file backups are enabled
+	var outputPath string
+	if uiCfg.EnableFileBackups {
+		// Determine output path based on whether input was file or ID
+		if _, err := os.Stat(txtPathOrID); err == nil {
+			// It was a file path
+			outputPath = strings.TrimSuffix(txtPathOrID, filepath.Ext(txtPathOrID)) + "_summary.txt"
+		} else {
+			// It was a recording ID, create output in default directory
+			cfg := a.settings.Get()
+			outputPath = filepath.Join(cfg.OutDir, fmt.Sprintf("%s_summary.txt", txtPathOrID))
+		}
+
+		if err := os.WriteFile(outputPath, []byte(summary), 0644); err != nil {
+			return "", fmt.Errorf("failed to write summary: %w", err)
+		}
+	}
+
+	return fmt.Sprintf("Summary saved to database (ID: %d)\n\n--- Summary ---\n%s", dbSummary.ID, summary), nil
 }
 
 // summariseWithLocalAI uses the local llama-server for summarisation
@@ -619,11 +812,38 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 	const channels uint32 = 1       // Reduced from 2 - mono is sufficient for speech and cuts file size in half
 	const bits uint16 = 16
 
-	ts := time.Now().Format("20060102_150405")
+	startTime := time.Now()
+	ts := startTime.Format("20060102_150405")
 	wavPath := filepath.Join(cfg.OutDir, ts+".wav")
 	writer, err := wav.NewWriter(wavPath, sampleRate, uint16(channels), bits)
 	if err != nil {
 		return "", fmt.Errorf("open wav: %w", err)
+	}
+
+	// Create recording entry in database
+	recordingMode := "loopback"
+	if dictation {
+		recordingMode = "dictation"
+	} else if withMic {
+		recordingMode = "mixed"
+	}
+
+	dbRecording := &db.Recording{
+		Filename:       ts + ".wav",
+		FilePath:       wavPath,
+		FileSize:       0, // Will be updated when recording stops
+		SampleRate:     int(sampleRate),
+		Channels:       int(channels),
+		BitsPerSample:  int(bits),
+		AudioFormat:    "PCM S16LE",
+		RecordingMode:  recordingMode,
+		WithMicrophone: withMic,
+		RecordedAt:     &startTime, // Store when recording started
+	}
+
+	if err := a.database.CreateRecording(dbRecording); err != nil {
+		_ = writer.Close()
+		return "", fmt.Errorf("failed to create recording in database: %w", err)
 	}
 
 	var rec *audio.Recorder
@@ -746,6 +966,7 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 	}()
 
 	a.recording = true
+	a.recordingID = dbRecording.ID
 	a.dictation = dictation
 	a.rec = rec
 	a.mic = mic
@@ -789,6 +1010,24 @@ func (a *App) PickWavFromOutDir() (string, error) {
 	return path, nil
 }
 
+// ListRecordings returns a list of recordings for selection
+func (a *App) ListRecordings(limit int) ([]*db.Recording, error) {
+	if a.database == nil {
+		return nil, errors.New("database not initialized")
+	}
+
+	return a.database.ListRecordings(limit, 0, nil, nil)
+}
+
+// GetRecordingByID returns a recording by its ID
+func (a *App) GetRecordingByID(id int) (*db.Recording, error) {
+	if a.database == nil {
+		return nil, errors.New("database not initialized")
+	}
+
+	return a.database.GetRecording(id)
+}
+
 // PickTxtFromOutDir opens a file picker defaulting to OutDir filtered to .txt
 func (a *App) PickTxtFromOutDir() (string, error) {
 	if a.uiCtx == nil {
@@ -816,6 +1055,31 @@ func (a *App) PickModelFile() (string, error) {
 		DefaultDirectory: "./models",
 		Filters: []wruntime.FileFilter{
 			{DisplayName: "GGUF Models", Pattern: "*.gguf"},
+			{DisplayName: "All Files", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// PickDatabaseFile opens a file picker for selecting a database file
+func (a *App) PickDatabaseFile() (string, error) {
+	if a.uiCtx == nil {
+		return "", errors.New("ui not ready")
+	}
+	cfg := a.settings.Get()
+	defaultDir := "./data"
+	if cfg.DatabasePath != "" {
+		defaultDir = filepath.Dir(cfg.DatabasePath)
+	}
+	path, err := wruntime.SaveFileDialog(a.uiCtx, wruntime.SaveDialogOptions{
+		Title:            "Choose Database",
+		DefaultDirectory: defaultDir,
+		DefaultFilename:  "blackbox.db",
+		Filters: []wruntime.FileFilter{
+			{DisplayName: "SQLite Database", Pattern: "*.db"},
 			{DisplayName: "All Files", Pattern: "*.*"},
 		},
 	})
@@ -954,22 +1218,192 @@ func (a *App) isLlamaServerRunning() bool {
 	return resp.StatusCode == 200
 }
 
-// GetAudioDataURL returns a base64-encoded data URL for the given WAV file
-func (a *App) GetAudioDataURL(wavPath string) (string, error) {
-	// Check if file exists
-	if _, err := os.Stat(wavPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("audio file not found: %s", wavPath)
-	}
+// GetAudioDataURL returns a base64-encoded data URL for the given WAV file or recording ID
+func (a *App) GetAudioDataURL(wavPathOrID string) (string, error) {
+	var audioData []byte
 
-	// Read the file
-	fileData, err := os.ReadFile(wavPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read audio file: %v", err)
+	// Check if it's a file path (for backwards compatibility)
+	if _, err := os.Stat(wavPathOrID); err == nil {
+		// It's a file path, read from file
+		audioData, err = os.ReadFile(wavPathOrID)
+		if err != nil {
+			return "", fmt.Errorf("failed to read audio file: %v", err)
+		}
+	} else {
+		// Try to parse as recording ID
+		var recordingID int
+		if _, parseErr := fmt.Sscanf(wavPathOrID, "%d", &recordingID); parseErr == nil {
+			// It's a recording ID, get from database
+			recording, dbErr := a.database.GetRecording(recordingID)
+			if dbErr != nil {
+				return "", fmt.Errorf("failed to get recording from database: %v", dbErr)
+			}
+			if recording.AudioData == nil {
+				return "", fmt.Errorf("recording has no audio data stored in database")
+			}
+			audioData = recording.AudioData
+		} else {
+			return "", fmt.Errorf("invalid file path or recording ID: %s", wavPathOrID)
+		}
 	}
 
 	// Encode as base64
-	base64Data := base64.StdEncoding.EncodeToString(fileData)
+	base64Data := base64.StdEncoding.EncodeToString(audioData)
 
 	// Return as data URL
 	return "data:audio/wav;base64," + base64Data, nil
+}
+
+// ImportData imports existing recordings, transcripts, and summaries from a directory
+func (a *App) ImportData(importDir string, dryRun bool, autoDetectMode bool) (map[string]interface{}, error) {
+	if a.database == nil {
+		return nil, errors.New("database not initialized")
+	}
+
+	// Get current settings
+	currentSettings := a.settings.Get()
+
+	// Create a temporary config for the import
+	config := map[string]interface{}{
+		"database_path":    currentSettings.OutDir + "/data/blackbox.db",
+		"import_dir":       importDir,
+		"dry_run":          dryRun,
+		"verbose":          true,
+		"batch_size":       100,
+		"auto_detect_mode": autoDetectMode,
+		"default_mode":     "loopback",
+	}
+
+	// Save config to a temporary file
+	tempConfigPath := filepath.Join(currentSettings.OutDir, "config", "temp_import.json")
+	if err := os.MkdirAll(filepath.Dir(tempConfigPath), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create config directory: %v", err)
+	}
+
+	configData, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config: %v", err)
+	}
+
+	if err := os.WriteFile(tempConfigPath, configData, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write temp config: %v", err)
+	}
+
+	// Find the import executable - check multiple possible locations
+	var importExePath string
+
+	// Method 1: Check same directory as GUI executable
+	if exePath, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exePath), "import.exe")
+		if _, err := os.Stat(candidate); err == nil {
+			importExePath = candidate
+		}
+	}
+
+	// Method 2: Check root directory relative to GUI location
+	if importExePath == "" {
+		if exePath, err := os.Executable(); err == nil {
+			// Go up two levels from build/bin to reach project root
+			rootDir := filepath.Dir(filepath.Dir(exePath))
+			candidate := filepath.Join(rootDir, "import.exe")
+			if _, err := os.Stat(candidate); err == nil {
+				importExePath = candidate
+			}
+		}
+	}
+
+	// Method 3: Check current working directory
+	if importExePath == "" {
+		candidate := "./import.exe"
+		if _, err := os.Stat(candidate); err == nil {
+			importExePath = candidate
+		}
+	}
+
+	if importExePath == "" {
+		return nil, fmt.Errorf("import executable not found - please ensure import.exe is built and available")
+	}
+
+	// Run the import command
+	cmd := exec.Command(importExePath, "run", "--config", tempConfigPath)
+	cmd.Dir = "."
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+
+	// Clean up temp config
+	os.Remove(tempConfigPath)
+
+	if err != nil {
+		return nil, fmt.Errorf("import failed: %v\nStderr: %s", err, stderr.String())
+	}
+
+	// Parse the results
+	result := map[string]interface{}{
+		"success": true,
+		"message": "Import completed successfully",
+		"stdout":  stdout.String(),
+		"stderr":  stderr.String(),
+	}
+
+	return result, nil
+}
+
+// GetImportProgress returns the current import progress (placeholder for now)
+func (a *App) GetImportProgress() (map[string]interface{}, error) {
+	// This would need to be implemented with proper progress tracking
+	// For now, return a simple status
+	return map[string]interface{}{
+		"status":  "ready",
+		"message": "Import system ready",
+	}, nil
+}
+
+// ValidateImportDirectory validates that a directory contains importable files
+func (a *App) ValidateImportDirectory(importDir string) (map[string]interface{}, error) {
+	// Check if directory exists
+	if _, err := os.Stat(importDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("directory does not exist: %s", importDir)
+	}
+
+	// Count files
+	wavFiles := 0
+	txtFiles := 0
+	summaryFiles := 0
+
+	err := filepath.Walk(importDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			filename := strings.ToLower(info.Name())
+			if strings.HasSuffix(filename, ".wav") {
+				wavFiles++
+			} else if strings.HasSuffix(filename, ".txt") {
+				if strings.HasSuffix(filename, "_summary.txt") {
+					summaryFiles++
+				} else {
+					txtFiles++
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan directory: %v", err)
+	}
+
+	return map[string]interface{}{
+		"valid":       true,
+		"wav_files":   wavFiles,
+		"transcripts": txtFiles,
+		"summaries":   summaryFiles,
+		"total_files": wavFiles + txtFiles + summaryFiles,
+	}, nil
 }

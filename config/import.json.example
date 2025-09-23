@@ -1,0 +1,7 @@
+{
+  "database_path": "./data/blackbox.db",
+  "import_dir": "./out",
+  "dry_run": false,
+  "verbose": true,
+  "batch_size": 100
+}

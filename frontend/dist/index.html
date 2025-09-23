@@ -24,6 +24,7 @@
     <div class="flex gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-blue-600 text-white ring-2 ring-blue-400 hover:bg-blue-700 transition-colors" data-tab="auto">Auto</div>
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="tools">Tools</div>
+      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="import">Import</div>
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="settings">Settings</div>
     </div>
 
@@ -187,12 +188,93 @@
       </div>
     </section>
 
+    <!-- Import Tab - Import existing data -->
+    <section id="import" class="page hidden p-4">
+      <div class="bg-gray-800 border border-gray-700 rounded-md p-4">
+        <h3 class="text-lg font-semibold text-white mb-3">Import Existing Data</h3>
+        <div class="text-gray-400 text-sm mb-4">Import recordings, transcripts, and summaries from an existing directory into the database.</div>
+
+        <div class="my-3">
+          <label class="block mb-2 text-gray-300">Import Directory</label>
+          <div class="flex gap-2">
+            <input type="text" id="importDir" placeholder="./out" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            <button id="btnPickImportDir" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors">Browse</button>
+          </div>
+          <div class="text-gray-400 text-xs mt-1">Directory containing WAV files, transcripts (.txt), and summaries</div>
+        </div>
+
+        <div class="my-3">
+          <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+            <input type="checkbox" id="importDryRun" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+            Dry run (preview only, no data imported)
+          </label>
+        </div>
+
+        <div class="my-3">
+          <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+            <input type="checkbox" id="importAutoDetectMode" checked class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+            Auto-detect recording modes from content
+          </label>
+        </div>
+
+        <div class="my-3">
+          <label class="block mb-2 text-gray-300">Default Recording Mode (if auto-detection disabled)</label>
+          <select id="importDefaultMode" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <option value="loopback">Loopback (system audio)</option>
+            <option value="dictation">Dictation (microphone only)</option>
+            <option value="mixed">Mixed (system + microphone)</option>
+          </select>
+        </div>
+
+        <div class="my-3">
+          <button id="btnValidateImport" class="bg-green-500 hover:bg-green-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors">Validate Directory</button>
+          <button id="btnImportData" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors ml-2" disabled>Import Data</button>
+        </div>
+
+        <!-- Validation Results -->
+        <div id="importValidationResults" class="my-3 hidden">
+          <div class="text-gray-300 text-sm mb-2">Directory Contents</div>
+          <div class="bg-gray-900 border border-gray-700 rounded-md p-3 text-sm">
+            <div id="importValidationText">Validating...</div>
+          </div>
+        </div>
+
+        <!-- Import Log -->
+        <div class="my-3">
+          <div class="text-gray-300 text-sm mb-2">Import Log</div>
+          <div id="importLog" class="whitespace-pre-wrap bg-gray-900 border border-gray-700 rounded-md p-3 max-h-48 overflow-auto text-sm"></div>
+        </div>
+      </div>
+    </section>
+
     <section id="settings" class="page hidden p-4">
       <div class="my-3">
         <label class="block mb-2 text-gray-300">Output Directory</label>
         <input type="text" id="outDir" placeholder="./out" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-96 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
       </div>
-      
+
+      <div class="my-6 border-t border-gray-700 pt-4">
+        <h3 class="text-lg font-semibold text-white mb-3">Database Settings</h3>
+        <div class="text-gray-400 text-sm mb-3">Configure where recordings, transcripts, and summaries are stored in the database.</div>
+
+        <div class="my-3">
+          <label class="block mb-2 text-gray-300">Database File Path</label>
+          <div class="flex gap-2">
+            <input type="text" id="databasePath" placeholder="./data/blackbox.db" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" readonly />
+            <button id="btnPickDatabase" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors">Browse</button>
+          </div>
+          <div class="text-gray-400 text-xs mt-1">SQLite database file location for storing recordings, transcripts, and summaries</div>
+        </div>
+
+        <div class="my-3">
+          <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+            <input type="checkbox" id="enableFileBackups" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
+            Enable file system backups
+          </label>
+          <div class="text-gray-400 text-xs mt-1">Also save recordings, transcripts, and summaries to the output directory as files</div>
+        </div>
+      </div>
+
       <div class="my-6 border-t border-gray-700 pt-4">
         <h3 class="text-lg font-semibold text-white mb-3">Local AI Settings</h3>
         <div class="text-gray-400 text-sm mb-3">Configure local AI parameters. Use the checkboxes in the Summarise and Record & Transcribe & Summarise tabs to enable local AI.</div>
@@ -363,7 +445,11 @@
         try {
           const s = await App().GetSettings();
           document.getElementById('outDir').value = (s && (s.out_dir || s.OutDir)) || './out';
-          
+
+          // Load database settings
+          document.getElementById('databasePath').value = (s && (s.database_path || s.DatabasePath)) || './data/blackbox.db';
+          document.getElementById('enableFileBackups').checked = (s && (s.enable_file_backups || s.EnableFileBackups)) || false;
+
           // Load local AI settings
           const useLocalAI = s && s.use_local_ai;
           document.getElementById('autoLocalAI').checked = useLocalAI;
@@ -376,8 +462,10 @@
       };
 
       const saveSettings = async () => {
-        const cfg = { 
+        const cfg = {
           out_dir: document.getElementById('outDir').value,
+          database_path: document.getElementById('databasePath').value,
+          enable_file_backups: document.getElementById('enableFileBackups').checked,
           use_local_ai: false, // This is now controlled by individual tab checkboxes
           llama_model: document.getElementById('llamaModel').value,
           llama_temp: parseFloat(document.getElementById('llamaTemp').value) || 0.1,
@@ -756,6 +844,91 @@
           }
         } catch (e) {
           console.error('Failed to pick model:', e);
+        }
+      };
+
+      // Database picker
+      document.getElementById('btnPickDatabase').onclick = async () => {
+        try {
+          const dbPath = await App().PickDatabaseFile();
+          if (dbPath) {
+            document.getElementById('databasePath').value = dbPath;
+          }
+        } catch (e) {
+          console.error('Failed to pick database:', e);
+        }
+      };
+
+      // Import functionality
+      let importDirPath = './out';
+
+      document.getElementById('btnPickImportDir').onclick = async () => {
+        try {
+          // For now, we'll use a simple prompt since we don't have a directory picker
+          const dir = prompt('Enter import directory path:', './out');
+          if (dir) {
+            importDirPath = dir;
+            document.getElementById('importDir').value = dir;
+          }
+        } catch (e) {
+          console.error('Failed to pick import directory:', e);
+        }
+      };
+
+      document.getElementById('btnValidateImport').onclick = async () => {
+        const validationResults = document.getElementById('importValidationResults');
+        const validationText = document.getElementById('importValidationText');
+
+        validationResults.classList.remove('hidden');
+        validationText.textContent = 'Validating...';
+
+        try {
+          const result = await App().ValidateImportDirectory(importDirPath);
+          if (result.valid) {
+            const files = result.wav_files + result.transcripts + result.summaries;
+            validationText.textContent = `Found ${result.wav_files} WAV files, ${result.transcripts} transcripts, and ${result.summaries} summaries (total: ${files} files)`;
+            document.getElementById('btnImportData').disabled = false;
+          } else {
+            validationText.textContent = 'Directory validation failed';
+            document.getElementById('btnImportData').disabled = true;
+          }
+        } catch (e) {
+          validationText.textContent = 'Validation error: ' + e;
+          document.getElementById('btnImportData').disabled = true;
+        }
+      };
+
+      document.getElementById('btnImportData').onclick = async () => {
+        const logElement = document.getElementById('importLog');
+        const btn = document.getElementById('btnImportData');
+
+        logElement.textContent = 'Starting import...\n';
+        btn.disabled = true;
+
+        try {
+          const dryRun = document.getElementById('importDryRun').checked;
+          const autoDetectMode = document.getElementById('importAutoDetectMode').checked;
+
+          logElement.textContent += `Importing from: ${importDirPath}\n`;
+          logElement.textContent += `Dry run: ${dryRun ? 'Yes' : 'No'}\n`;
+          logElement.textContent += `Auto-detect mode: ${autoDetectMode ? 'Yes' : 'No'}\n`;
+          logElement.textContent += 'Running import...\n\n';
+
+          const result = await App().ImportData(importDirPath, dryRun, autoDetectMode);
+
+          logElement.textContent += result.stdout + '\n';
+          if (result.stderr) {
+            logElement.textContent += 'Warnings/Errors:\n' + result.stderr + '\n';
+          }
+
+          logElement.textContent += '\n' + result.message;
+
+          // Re-enable button
+          btn.disabled = false;
+
+        } catch (e) {
+          logElement.textContent += '\nImport failed: ' + e;
+          btn.disabled = false;
         }
       };
 
