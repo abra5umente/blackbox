@@ -26,12 +26,20 @@ export function GetRecordingByID(arg1) {
   return window['go']['ui']['App']['GetRecordingByID'](arg1);
 }
 
+export function GetRecordingFilePath(arg1) {
+  return window['go']['ui']['App']['GetRecordingFilePath'](arg1);
+}
+
 export function GetSelectedPrompt() {
   return window['go']['ui']['App']['GetSelectedPrompt']();
 }
 
 export function GetSettings() {
   return window['go']['ui']['App']['GetSettings']();
+}
+
+export function GetTranscriptContent(arg1) {
+  return window['go']['ui']['App']['GetTranscriptContent'](arg1);
 }
 
 export function ImportData(arg1, arg2, arg3) {
@@ -44,6 +52,10 @@ export function IsRecording() {
 
 export function ListRecordings(arg1) {
   return window['go']['ui']['App']['ListRecordings'](arg1);
+}
+
+export function ListRecordingsWithTranscripts() {
+  return window['go']['ui']['App']['ListRecordingsWithTranscripts']();
 }
 
 export function PickDatabaseFile() {
@@ -68,6 +80,10 @@ export function SaveCustomPrompt(arg1) {
 
 export function SaveSettings(arg1) {
   return window['go']['ui']['App']['SaveSettings'](arg1);
+}
+
+export function SelectDatabase(arg1) {
+  return window['go']['ui']['App']['SelectDatabase'](arg1);
 }
 
 export function SetSelectedPrompt(arg1) {

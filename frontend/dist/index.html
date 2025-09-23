@@ -128,10 +128,39 @@
         <!-- Transcribe Section -->
         <div class="bg-gray-800 border border-gray-700 rounded-md p-4">
           <h3 class="text-lg font-semibold text-white mb-3">Transcribe</h3>
+
+          <!-- Selection Method -->
           <div class="my-3">
+            <label class="block mb-2 text-gray-300">Selection Method</label>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+                <input type="radio" name="transcribeSource" value="filesystem" checked class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 focus:ring-blue-500 focus:ring-2" />
+                File System
+              </label>
+              <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+                <input type="radio" name="transcribeSource" value="database" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 focus:ring-blue-500 focus:ring-2" />
+                Database
+              </label>
+            </div>
+          </div>
+
+          <!-- File System Selection -->
+          <div id="transcribeFileSection" class="my-3">
             <button id="btnToolsPickWav" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors w-full">Choose WAV</button>
             <span id="toolsPickedWav" class="text-gray-400 text-sm block mt-2 break-words"></span>
           </div>
+
+          <!-- Database Selection -->
+          <div id="transcribeDatabaseSection" class="my-3 hidden">
+            <label class="block mb-2 text-gray-300">Select Recording</label>
+            <select id="transcribeRecordingSelect" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full">
+              <option value="">Loading recordings...</option>
+            </select>
+            <div id="transcribeRecordingInfo" class="text-gray-400 text-xs mt-2 hidden">
+              <!-- Recording metadata will be displayed here -->
+            </div>
+          </div>
+
           <div class="my-3">
             <button id="btnToolsTranscribe" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full" disabled>Transcribe</button>
           </div>
@@ -139,7 +168,7 @@
             <div class="text-gray-300 text-sm mb-2">System Messages</div>
             <div id="toolsTranscribeLog" class="whitespace-pre-wrap bg-gray-900 border border-gray-700 rounded-md p-3 max-h-32 overflow-auto text-sm"></div>
           </div>
-          
+
           <!-- Audio Player for transcribe WAV -->
           <div id="toolsTranscribeAudioPlayerSection" class="my-4 hidden">
             <div class="text-gray-300 text-sm mb-2">Audio File</div>
@@ -152,10 +181,42 @@
         <!-- Summarise Section -->
         <div class="bg-gray-800 border border-gray-700 rounded-md p-4">
           <h3 class="text-lg font-semibold text-white mb-3">Summarise</h3>
+
+          <!-- Selection Method -->
           <div class="my-3">
+            <label class="block mb-2 text-gray-300">Selection Method</label>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+                <input type="radio" name="summariseSource" value="filesystem" checked class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 focus:ring-blue-500 focus:ring-2" />
+                File System
+              </label>
+              <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
+                <input type="radio" name="summariseSource" value="database" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 focus:ring-blue-500 focus:ring-2" />
+                Database
+              </label>
+            </div>
+          </div>
+
+          <!-- File System Selection -->
+          <div id="summariseFileSection" class="my-3">
             <button id="btnToolsPickTxt" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors w-full">Choose TXT</button>
             <span id="toolsPickedTxt" class="text-gray-400 text-sm block mt-2 break-words"></span>
           </div>
+
+          <!-- Database Selection -->
+          <div id="summariseDatabaseSection" class="my-3 hidden">
+            <label class="block mb-2 text-gray-300">Select Recording</label>
+            <select id="summariseRecordingSelect" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full">
+              <option value="">Loading recordings...</option>
+            </select>
+            <div id="summariseRecordingInfo" class="text-gray-400 text-xs mt-2 hidden">
+              <!-- Recording metadata will be displayed here -->
+            </div>
+            <div id="summariseTranscriptPreview" class="bg-gray-900 border border-gray-700 rounded-md p-3 mt-2 max-h-24 overflow-auto text-sm hidden">
+              <!-- Transcript preview will be displayed here -->
+            </div>
+          </div>
+
           <div class="my-3">
             <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
               <input type="checkbox" id="toolsSummariseLocalAI" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
@@ -742,6 +803,103 @@
         document.getElementById('btnAutoStart').disabled = false;
       };
 
+      // Database Selection Functions
+      const loadRecordingsForSelection = async () => {
+        try {
+          const recordings = await App().ListRecordings(0);
+          populateRecordingDropdown('transcribeRecordingSelect', recordings);
+          populateRecordingDropdown('summariseRecordingSelect', recordings);
+        } catch (e) {
+          console.error('Failed to load recordings:', e);
+          // Show error in dropdowns
+          const transcribeSelect = document.getElementById('transcribeRecordingSelect');
+          const summariseSelect = document.getElementById('summariseRecordingSelect');
+          transcribeSelect.innerHTML = '<option value="">Error loading recordings</option>';
+          summariseSelect.innerHTML = '<option value="">Error loading recordings</option>';
+        }
+      };
+
+      const populateRecordingDropdown = (selectId, recordings) => {
+        const select = document.getElementById(selectId);
+        select.innerHTML = '<option value="">Select a recording...</option>';
+
+        recordings.forEach(recording => {
+          const option = document.createElement('option');
+          option.value = recording.id;
+          option.textContent = `${recording.filename} (${recording.duration_seconds?.toFixed(1) || '0.0'}s, ${recording.recording_mode})`;
+          select.appendChild(option);
+        });
+      };
+
+      const showRecordingInfo = async (recordingId, infoElementId, previewElementId = null) => {
+        if (!recordingId) {
+          document.getElementById(infoElementId).classList.add('hidden');
+          if (previewElementId) document.getElementById(previewElementId).classList.add('hidden');
+          return;
+        }
+
+        try {
+          const recording = await App().GetRecordingByID(parseInt(recordingId));
+          const infoEl = document.getElementById(infoElementId);
+
+          let infoText = `Duration: ${recording.duration_seconds?.toFixed(1) || '0.0'}s | Mode: ${recording.recording_mode}`;
+          if (recording.with_microphone) infoText += ' | With Microphone';
+          if (recording.recorded_at) infoText += ` | Recorded: ${new Date(recording.recorded_at).toLocaleString()}`;
+
+          infoEl.innerHTML = infoText;
+          infoEl.classList.remove('hidden');
+
+          // Show transcript preview for summarise section
+          if (previewElementId) {
+            try {
+              const transcriptContent = await App().GetTranscriptContent(parseInt(recordingId));
+              const previewEl = document.getElementById(previewElementId);
+              previewEl.textContent = transcriptContent.substring(0, 200) + (transcriptContent.length > 200 ? '...' : '');
+              previewEl.classList.remove('hidden');
+            } catch (e) {
+              // No transcript available
+              document.getElementById(previewElementId).classList.add('hidden');
+            }
+          }
+        } catch (e) {
+          console.error('Failed to get recording info:', e);
+          document.getElementById(infoElementId).classList.add('hidden');
+          if (previewElementId) document.getElementById(previewElementId).classList.add('hidden');
+        }
+      };
+
+      const switchTranscribeSource = (source) => {
+        const fileSection = document.getElementById('transcribeFileSection');
+        const dbSection = document.getElementById('transcribeDatabaseSection');
+
+        if (source === 'filesystem') {
+          fileSection.classList.remove('hidden');
+          dbSection.classList.add('hidden');
+          document.getElementById('btnToolsTranscribe').disabled = !toolsPickedWav;
+        } else {
+          fileSection.classList.add('hidden');
+          dbSection.classList.remove('hidden');
+          const selectedRecording = document.getElementById('transcribeRecordingSelect').value;
+          document.getElementById('btnToolsTranscribe').disabled = !selectedRecording;
+        }
+      };
+
+      const switchSummariseSource = (source) => {
+        const fileSection = document.getElementById('summariseFileSection');
+        const dbSection = document.getElementById('summariseDatabaseSection');
+
+        if (source === 'filesystem') {
+          fileSection.classList.remove('hidden');
+          dbSection.classList.add('hidden');
+          document.getElementById('btnToolsSummarise').disabled = !toolsPickedTxt;
+        } else {
+          fileSection.classList.add('hidden');
+          dbSection.classList.remove('hidden');
+          const selectedRecording = document.getElementById('summariseRecordingSelect').value;
+          document.getElementById('btnToolsSummarise').disabled = !selectedRecording;
+        }
+      };
+
       // Tools Tab Event Handlers
       // Record section
       document.getElementById('btnToolsStart').onclick = async () => {
@@ -765,25 +923,74 @@
       };
 
       // Transcribe section
+      // Radio button change handlers
+      document.querySelectorAll('input[name="transcribeSource"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+          switchTranscribeSource(e.target.value);
+        });
+      });
+
       document.getElementById('btnToolsPickWav').onclick = async () => {
         const f = await App().PickWavFromOutDir();
-        if (f) { 
-          toolsPickedWav = f; 
-          document.getElementById('toolsPickedWav').textContent = f; 
+        if (f) {
+          toolsPickedWav = f;
+          document.getElementById('toolsPickedWav').textContent = f;
           document.getElementById('btnToolsTranscribe').disabled = false;
-          
+
           // Setup audio player
           await setupAudioPlayer('toolsTranscribeAudioPlayer', f);
           document.getElementById('toolsTranscribeAudioPlayerSection').classList.remove('hidden');
         }
       };
 
+      // Database selection handler for transcribe
+      document.getElementById('transcribeRecordingSelect').addEventListener('change', async (e) => {
+        const recordingId = e.target.value;
+        await showRecordingInfo(recordingId, 'transcribeRecordingInfo');
+
+        // Enable transcribe button if a recording is selected
+        document.getElementById('btnToolsTranscribe').disabled = !recordingId;
+
+        // Setup audio player if we have a recording
+        if (recordingId) {
+          try {
+            const wavPath = await App().GetRecordingFilePath(parseInt(recordingId));
+            await setupAudioPlayer('toolsTranscribeAudioPlayer', wavPath);
+            document.getElementById('toolsTranscribeAudioPlayerSection').classList.remove('hidden');
+          } catch (e) {
+            console.error('Failed to get recording file path:', e);
+          }
+        } else {
+          document.getElementById('toolsTranscribeAudioPlayerSection').classList.add('hidden');
+        }
+      });
+
       document.getElementById('btnToolsTranscribe').onclick = async () => {
         document.getElementById('toolsTranscribeLog').textContent = 'Transcribing...';
         try {
-          const txt = await App().Transcribe(toolsPickedWav);
+          let wavPath;
+          let txt;
+
+          // Check which source is selected
+          const sourceType = document.querySelector('input[name="transcribeSource"]:checked').value;
+
+          if (sourceType === 'filesystem') {
+            if (!toolsPickedWav) {
+              throw new Error('No WAV file selected');
+            }
+            wavPath = toolsPickedWav;
+            txt = await App().Transcribe(toolsPickedWav);
+          } else {
+            const recordingId = document.getElementById('transcribeRecordingSelect').value;
+            if (!recordingId) {
+              throw new Error('No recording selected');
+            }
+            wavPath = await App().GetRecordingFilePath(parseInt(recordingId));
+            txt = await App().Transcribe(wavPath);
+          }
+
           document.getElementById('toolsTranscribeLog').textContent = 'Transcribed: ' + txt;
-          
+
           // Read the transcript content and render it
           try {
             const response = await fetch('file:///' + txt.replace(/\\/g, '/'));
@@ -800,14 +1007,30 @@
       };
 
       // Summarise section
+      // Radio button change handlers
+      document.querySelectorAll('input[name="summariseSource"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+          switchSummariseSource(e.target.value);
+        });
+      });
+
       document.getElementById('btnToolsPickTxt').onclick = async () => {
         const f = await App().PickTxtFromOutDir();
-        if (f) { 
-          toolsPickedTxt = f; 
-          document.getElementById('toolsPickedTxt').textContent = f; 
-          document.getElementById('btnToolsSummarise').disabled = false; 
+        if (f) {
+          toolsPickedTxt = f;
+          document.getElementById('toolsPickedTxt').textContent = f;
+          document.getElementById('btnToolsSummarise').disabled = false;
         }
       };
+
+      // Database selection handler for summarise
+      document.getElementById('summariseRecordingSelect').addEventListener('change', async (e) => {
+        const recordingId = e.target.value;
+        await showRecordingInfo(recordingId, 'summariseRecordingInfo', 'summariseTranscriptPreview');
+
+        // Enable summarise button if a recording is selected
+        document.getElementById('btnToolsSummarise').disabled = !recordingId;
+      });
 
       document.getElementById('btnToolsSummarise').onclick = async () => {
         document.getElementById('toolsSummariseLog').textContent = 'Summarising...';
@@ -820,10 +1043,31 @@
             use_local_ai: useLocalAI
           };
           await App().SaveSettings(JSON.stringify(updatedSettings));
-          
-          const msg = await App().Summarise(toolsPickedTxt);
-          document.getElementById('toolsSummariseLog').textContent = 'Summary written to: ' + toolsPickedTxt.replace('.txt', '_summary.txt');
-          
+
+          let txtPath;
+          let msg;
+
+          // Check which source is selected
+          const sourceType = document.querySelector('input[name="summariseSource"]:checked').value;
+
+          if (sourceType === 'filesystem') {
+            if (!toolsPickedTxt) {
+              throw new Error('No TXT file selected');
+            }
+            txtPath = toolsPickedTxt;
+            msg = await App().Summarise(toolsPickedTxt);
+          } else {
+            const recordingId = document.getElementById('summariseRecordingSelect').value;
+            if (!recordingId) {
+              throw new Error('No recording selected');
+            }
+            // Use recording ID for database lookup
+            msg = await App().Summarise(recordingId.toString());
+            txtPath = recordingId.toString(); // For display purposes
+          }
+
+          document.getElementById('toolsSummariseLog').textContent = 'Summary written to: ' + txtPath + '_summary.txt';
+
           // Render formatted output (only the summary content, not system messages)
           renderMarkdown(msg, 'toolsFormattedOutput');
           document.getElementById('toolsFormattedOutputSection').classList.remove('hidden');
@@ -852,10 +1096,19 @@
         try {
           const dbPath = await App().PickDatabaseFile();
           if (dbPath) {
+            // Switch to the new database
+            await App().SelectDatabase(dbPath);
             document.getElementById('databasePath').value = dbPath;
+            
+            // Reload recordings for both tabs
+            await loadRecordingsForSelection();
+            
+            // Show success message
+            document.getElementById('settingsLog').textContent = `Database switched to: ${dbPath}`;
           }
         } catch (e) {
           console.error('Failed to pick database:', e);
+          document.getElementById('settingsLog').textContent = `Error switching database: ${e.message}`;
         }
       };
 
@@ -945,7 +1198,14 @@
       });
 
       // Tab switching
-      document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => setActive(tab.dataset.tab)));
+      document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', async () => {
+        setActive(tab.dataset.tab);
+
+        // Load recordings when Tools tab is activated
+        if (tab.dataset.tab === 'tools') {
+          await loadRecordingsForSelection();
+        }
+      }));
 
       // Initialize
       loadSettings();

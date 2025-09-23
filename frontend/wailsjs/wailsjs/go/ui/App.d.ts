@@ -16,15 +16,21 @@ export function GetPromptConfig(arg1:string):Promise<ui.PromptConfig>;
 
 export function GetRecordingByID(arg1:number):Promise<db.Recording>;
 
+export function GetRecordingFilePath(arg1:number):Promise<string>;
+
 export function GetSelectedPrompt():Promise<string>;
 
 export function GetSettings():Promise<ui.UISettings>;
+
+export function GetTranscriptContent(arg1:number):Promise<string>;
 
 export function ImportData(arg1:string,arg2:boolean,arg3:boolean):Promise<Record<string, any>>;
 
 export function IsRecording():Promise<boolean>;
 
 export function ListRecordings(arg1:number):Promise<Array<db.Recording>>;
+
+export function ListRecordingsWithTranscripts():Promise<Array<db.RecordingWithDetails>>;
 
 export function PickDatabaseFile():Promise<string>;
 
@@ -37,6 +43,8 @@ export function PickWavFromOutDir():Promise<string>;
 export function SaveCustomPrompt(arg1:ui.PromptConfig):Promise<void>;
 
 export function SaveSettings(arg1:string):Promise<ui.UISettings>;
+
+export function SelectDatabase(arg1:string):Promise<void>;
 
 export function SetSelectedPrompt(arg1:string):Promise<void>;
 

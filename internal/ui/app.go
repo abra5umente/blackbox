@@ -1064,6 +1064,62 @@ func (a *App) PickModelFile() (string, error) {
 	return path, nil
 }
 
+// ListRecordingsWithTranscripts returns recordings that have transcripts for selection
+func (a *App) ListRecordingsWithTranscripts() ([]*db.RecordingWithDetails, error) {
+	if a.database == nil {
+		return nil, errors.New("database not initialized")
+	}
+
+	// Get recordings that have transcripts
+	recordings, err := a.database.ListRecordings(0, 0, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*db.RecordingWithDetails
+	for _, rec := range recordings {
+		// Get detailed info including transcript
+		details, err := a.database.GetRecordingWithDetails(rec.ID)
+		if err != nil {
+			continue // Skip if we can't get details
+		}
+		// Only include recordings that have transcripts
+		if details.TranscriptID != nil {
+			result = append(result, details)
+		}
+	}
+
+	return result, nil
+}
+
+// GetRecordingFilePath returns the file path for a recording
+func (a *App) GetRecordingFilePath(recordingID int) (string, error) {
+	if a.database == nil {
+		return "", errors.New("database not initialized")
+	}
+
+	recording, err := a.database.GetRecording(recordingID)
+	if err != nil {
+		return "", err
+	}
+
+	return recording.FilePath, nil
+}
+
+// GetTranscriptContent returns the transcript content for a recording
+func (a *App) GetTranscriptContent(recordingID int) (string, error) {
+	if a.database == nil {
+		return "", errors.New("database not initialized")
+	}
+
+	transcript, err := a.database.GetTranscriptByRecordingID(recordingID)
+	if err != nil {
+		return "", err
+	}
+
+	return transcript.Content, nil
+}
+
 // PickDatabaseFile opens a file picker for selecting a database file
 func (a *App) PickDatabaseFile() (string, error) {
 	if a.uiCtx == nil {
@@ -1087,6 +1143,38 @@ func (a *App) PickDatabaseFile() (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// SelectDatabase switches to a new database file
+func (a *App) SelectDatabase(dbPath string) error {
+	if dbPath == "" {
+		return errors.New("database path cannot be empty")
+	}
+
+	// Close current database connection
+	if a.database != nil {
+		if err := a.database.Close(); err != nil {
+			return fmt.Errorf("failed to close current database: %w", err)
+		}
+	}
+
+	// Create new database connection
+	newDB, err := db.NewDB(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open new database: %w", err)
+	}
+	a.database = newDB
+
+	// Update settings with new database path
+	cfg := a.settings.Get()
+	cfg.DatabasePath = dbPath
+	if err := a.settings.Save(cfg); err != nil {
+		// If settings update fails, we should still keep the new database
+		// but log the error
+		fmt.Printf("Warning: failed to update settings with new database path: %v\n", err)
+	}
+
+	return nil
 }
 
 // startLlamaServer starts the llama-server with the configured parameters
