@@ -69,4 +69,10 @@ config/ui.json
 *.log.*
 
 # database files
-data/*
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.db-lock
+*.db-trace
+*.db-trace.lock*
