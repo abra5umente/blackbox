@@ -411,6 +411,107 @@ func intPtr(i int) *int {
 	return &i
 }
 
+func intPtrFromNull(ni sql.NullInt64) *int {
+	if ni.Valid {
+		i := int(ni.Int64)
+		return &i
+	}
+	return nil
+}
+
+// GetRecordingsWithDetails returns recordings with their transcripts and summaries
+func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithDetails, error) {
+	query := `
+		SELECT 
+			r.id, r.filename, r.display_name, r.file_path, r.file_size, r.duration_seconds,
+			r.sample_rate, r.channels, r.bits_per_sample, r.audio_format,
+			r.recording_mode, r.with_microphone, r.created_at, r.recorded_at, r.notes, r.tags,
+			t.id as transcript_id, t.content as transcript_content, t.model_used as transcript_model,
+			t.confidence_score, t.created_at as transcript_created_at,
+			s.id as summary_id, s.content as summary_content, s.summary_type, s.model_used as summary_model,
+			s.created_at as summary_created_at
+		FROM recordings r
+		LEFT JOIN transcripts t ON r.id = t.recording_id
+		LEFT JOIN summaries s ON t.id = s.transcript_id
+		ORDER BY r.created_at DESC
+		LIMIT ? OFFSET ?`
+
+	rows, err := db.Query(query, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recordings with details: %w", err)
+	}
+	defer rows.Close()
+
+	var recordings []*RecordingWithDetails
+
+	for rows.Next() {
+		var recording RecordingWithDetails
+		var transcriptID sql.NullInt64
+		var transcriptContent sql.NullString
+		var transcriptModel sql.NullString
+		var confidenceScore sql.NullFloat64
+		var transcriptCreatedAt sql.NullTime
+		var summaryID sql.NullInt64
+		var summaryContent sql.NullString
+		var summaryType sql.NullString
+		var summaryModel sql.NullString
+		var summaryCreatedAt sql.NullTime
+
+		err := rows.Scan(
+			&recording.ID, &recording.Filename, &recording.DisplayName, &recording.FilePath,
+			&recording.FileSize, &recording.DurationSeconds, &recording.SampleRate,
+			&recording.Channels, &recording.BitsPerSample, &recording.AudioFormat,
+			&recording.RecordingMode, &recording.WithMicrophone, &recording.CreatedAt,
+			&recording.RecordedAt, &recording.Notes, &recording.Tags,
+			&transcriptID, &transcriptContent, &transcriptModel, &confidenceScore, &transcriptCreatedAt,
+			&summaryID, &summaryContent, &summaryType, &summaryModel, &summaryCreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan recording with details: %w", err)
+		}
+
+		// Set transcript fields if available
+		if transcriptID.Valid {
+			id := int(transcriptID.Int64)
+			recording.TranscriptID = &id
+		}
+		if transcriptContent.Valid {
+			recording.TranscriptContent = &transcriptContent.String
+		}
+		if transcriptModel.Valid {
+			recording.TranscriptModel = &transcriptModel.String
+		}
+		if confidenceScore.Valid {
+			recording.ConfidenceScore = &confidenceScore.Float64
+		}
+		if transcriptCreatedAt.Valid {
+			recording.TranscribedAt = &transcriptCreatedAt.Time
+		}
+
+		// Set summary fields if available
+		if summaryID.Valid {
+			id := int(summaryID.Int64)
+			recording.SummaryID = &id
+		}
+		if summaryContent.Valid {
+			recording.SummaryContent = &summaryContent.String
+		}
+		if summaryType.Valid {
+			recording.SummaryType = &summaryType.String
+		}
+		if summaryModel.Valid {
+			recording.SummaryModel = &summaryModel.String
+		}
+		if summaryCreatedAt.Valid {
+			recording.SummarizedAt = &summaryCreatedAt.Time
+		}
+
+		recordings = append(recordings, &recording)
+	}
+
+	return recordings, nil
+}
+
 // nullBytes handles nullable byte slices for BLOB columns
 func nullBytes(data []byte) interface{} {
 	if data == nil {

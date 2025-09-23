@@ -218,6 +218,51 @@ func (db *DB) ListTranscripts(limit, offset int, recordingID *int, model *string
 	return transcripts, nil
 }
 
+// GetTranscriptsByRecordingID returns all transcripts for a specific recording
+func (db *DB) GetTranscriptsByRecordingID(recordingID int) ([]*Transcript, error) {
+	query := `
+		SELECT id, recording_id, content, confidence_score, model_used, language,
+		       processing_time_seconds, whisper_version, created_at
+		FROM transcripts 
+		WHERE recording_id = ? 
+		ORDER BY created_at DESC`
+
+	rows, err := db.Query(query, recordingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query transcripts by recording ID: %w", err)
+	}
+	defer rows.Close()
+
+	var transcripts []*Transcript
+	for rows.Next() {
+		var transcript Transcript
+		var confidenceScore sql.NullFloat64
+		var processingTimeSeconds sql.NullFloat64
+
+		err := rows.Scan(
+			&transcript.ID,
+			&transcript.RecordingID,
+			&transcript.Content,
+			&confidenceScore,
+			&transcript.ModelUsed,
+			&transcript.Language,
+			&processingTimeSeconds,
+			&transcript.WhisperVersion,
+			&transcript.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan transcript: %w", err)
+		}
+
+		transcript.ConfidenceScore = float64Ptr(confidenceScore)
+		transcript.ProcessingTimeSeconds = float64Ptr(processingTimeSeconds)
+
+		transcripts = append(transcripts, &transcript)
+	}
+
+	return transcripts, nil
+}
+
 // UpdateTranscript updates an existing transcript
 func (db *DB) UpdateTranscript(transcript *Transcript) error {
 	query := `

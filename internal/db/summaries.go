@@ -11,9 +11,9 @@ func (db *DB) CreateSummary(summary *Summary) error {
 	query := `
 		INSERT INTO summaries (
 			transcript_id, content, summary_type, model_used,
-			temperature, prompt_used, processing_time_seconds,
+			temperature, prompt_used, prompt_id, processing_time_seconds,
 			api_endpoint, local_model_path
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := db.Exec(query,
 		summary.TranscriptID,
@@ -22,6 +22,7 @@ func (db *DB) CreateSummary(summary *Summary) error {
 		summary.ModelUsed,
 		nullFloat64(summary.Temperature),
 		summary.PromptUsed,
+		nullInt(summary.PromptID),
 		nullFloat64(summary.ProcessingTimeSeconds),
 		nullString(summary.APIEndpoint),
 		nullString(summary.LocalModelPath),
@@ -44,7 +45,7 @@ func (db *DB) CreateSummary(summary *Summary) error {
 func (db *DB) GetSummary(id int) (*Summary, error) {
 	query := `
 		SELECT id, transcript_id, content, summary_type, model_used,
-		       temperature, prompt_used, processing_time_seconds,
+		       temperature, prompt_used, prompt_id, processing_time_seconds,
 		       api_endpoint, local_model_path, created_at
 		FROM summaries WHERE id = ?`
 
@@ -53,6 +54,7 @@ func (db *DB) GetSummary(id int) (*Summary, error) {
 	var processingTimeSeconds sql.NullFloat64
 	var apiEndpoint sql.NullString
 	var localModelPath sql.NullString
+	var promptID sql.NullInt64
 
 	err := db.QueryRow(query, id).Scan(
 		&summary.ID,
@@ -62,6 +64,7 @@ func (db *DB) GetSummary(id int) (*Summary, error) {
 		&summary.ModelUsed,
 		&temperature,
 		&summary.PromptUsed,
+		&promptID,
 		&processingTimeSeconds,
 		&apiEndpoint,
 		&localModelPath,
@@ -75,6 +78,7 @@ func (db *DB) GetSummary(id int) (*Summary, error) {
 	}
 
 	summary.Temperature = float64Ptr(temperature)
+	summary.PromptID = intPtrFromNull(promptID)
 	summary.ProcessingTimeSeconds = float64Ptr(processingTimeSeconds)
 	summary.APIEndpoint = stringPtr(apiEndpoint)
 	summary.LocalModelPath = stringPtr(localModelPath)
@@ -86,7 +90,7 @@ func (db *DB) GetSummary(id int) (*Summary, error) {
 func (db *DB) GetSummaryByTranscriptID(transcriptID int) (*Summary, error) {
 	query := `
 		SELECT id, transcript_id, content, summary_type, model_used,
-		       temperature, prompt_used, processing_time_seconds,
+		       temperature, prompt_used, prompt_id, processing_time_seconds,
 		       api_endpoint, local_model_path, created_at
 		FROM summaries WHERE transcript_id = ?`
 
@@ -95,6 +99,7 @@ func (db *DB) GetSummaryByTranscriptID(transcriptID int) (*Summary, error) {
 	var processingTimeSeconds sql.NullFloat64
 	var apiEndpoint sql.NullString
 	var localModelPath sql.NullString
+	var promptID sql.NullInt64
 
 	err := db.QueryRow(query, transcriptID).Scan(
 		&summary.ID,
@@ -104,6 +109,7 @@ func (db *DB) GetSummaryByTranscriptID(transcriptID int) (*Summary, error) {
 		&summary.ModelUsed,
 		&temperature,
 		&summary.PromptUsed,
+		&promptID,
 		&processingTimeSeconds,
 		&apiEndpoint,
 		&localModelPath,
@@ -117,6 +123,7 @@ func (db *DB) GetSummaryByTranscriptID(transcriptID int) (*Summary, error) {
 	}
 
 	summary.Temperature = float64Ptr(temperature)
+	summary.PromptID = intPtrFromNull(promptID)
 	summary.ProcessingTimeSeconds = float64Ptr(processingTimeSeconds)
 	summary.APIEndpoint = stringPtr(apiEndpoint)
 	summary.LocalModelPath = stringPtr(localModelPath)
@@ -128,7 +135,7 @@ func (db *DB) GetSummaryByTranscriptID(transcriptID int) (*Summary, error) {
 func (db *DB) GetSummaryByTranscriptIDAndType(transcriptID int, summaryType string) (*Summary, error) {
 	query := `
 		SELECT id, transcript_id, content, summary_type, model_used,
-		       temperature, prompt_used, processing_time_seconds,
+		       temperature, prompt_used, prompt_id, processing_time_seconds,
 		       api_endpoint, local_model_path, created_at
 		FROM summaries WHERE transcript_id = ? AND summary_type = ?`
 
@@ -137,6 +144,7 @@ func (db *DB) GetSummaryByTranscriptIDAndType(transcriptID int, summaryType stri
 	var processingTimeSeconds sql.NullFloat64
 	var apiEndpoint sql.NullString
 	var localModelPath sql.NullString
+	var promptID sql.NullInt64
 
 	err := db.QueryRow(query, transcriptID, summaryType).Scan(
 		&summary.ID,
@@ -146,6 +154,7 @@ func (db *DB) GetSummaryByTranscriptIDAndType(transcriptID int, summaryType stri
 		&summary.ModelUsed,
 		&temperature,
 		&summary.PromptUsed,
+		&promptID,
 		&processingTimeSeconds,
 		&apiEndpoint,
 		&localModelPath,
@@ -159,6 +168,7 @@ func (db *DB) GetSummaryByTranscriptIDAndType(transcriptID int, summaryType stri
 	}
 
 	summary.Temperature = float64Ptr(temperature)
+	summary.PromptID = intPtrFromNull(promptID)
 	summary.ProcessingTimeSeconds = float64Ptr(processingTimeSeconds)
 	summary.APIEndpoint = stringPtr(apiEndpoint)
 	summary.LocalModelPath = stringPtr(localModelPath)
@@ -170,7 +180,7 @@ func (db *DB) GetSummaryByTranscriptIDAndType(transcriptID int, summaryType stri
 func (db *DB) ListSummaries(limit, offset int, transcriptID *int, summaryType *string, model *string) ([]*Summary, error) {
 	query := `
 		SELECT id, transcript_id, content, summary_type, model_used,
-		       temperature, prompt_used, processing_time_seconds,
+		       temperature, prompt_used, prompt_id, processing_time_seconds,
 		       api_endpoint, local_model_path, created_at
 		FROM summaries WHERE 1=1`
 
@@ -212,6 +222,7 @@ func (db *DB) ListSummaries(limit, offset int, transcriptID *int, summaryType *s
 		var processingTimeSeconds sql.NullFloat64
 		var apiEndpoint sql.NullString
 		var localModelPath sql.NullString
+		var promptID sql.NullInt64
 
 		err := rows.Scan(
 			&summary.ID,
@@ -221,6 +232,7 @@ func (db *DB) ListSummaries(limit, offset int, transcriptID *int, summaryType *s
 			&summary.ModelUsed,
 			&temperature,
 			&summary.PromptUsed,
+			&promptID,
 			&processingTimeSeconds,
 			&apiEndpoint,
 			&localModelPath,
@@ -231,6 +243,7 @@ func (db *DB) ListSummaries(limit, offset int, transcriptID *int, summaryType *s
 		}
 
 		summary.Temperature = float64Ptr(temperature)
+		summary.PromptID = intPtrFromNull(promptID)
 		summary.ProcessingTimeSeconds = float64Ptr(processingTimeSeconds)
 		summary.APIEndpoint = stringPtr(apiEndpoint)
 		summary.LocalModelPath = stringPtr(localModelPath)
@@ -249,7 +262,7 @@ func (db *DB) ListSummaries(limit, offset int, transcriptID *int, summaryType *s
 func (db *DB) UpdateSummary(summary *Summary) error {
 	query := `
 		UPDATE summaries SET
-			content = ?, temperature = ?, prompt_used = ?,
+			content = ?, temperature = ?, prompt_used = ?, prompt_id = ?,
 			processing_time_seconds = ?, api_endpoint = ?, local_model_path = ?
 		WHERE id = ?`
 
@@ -257,6 +270,7 @@ func (db *DB) UpdateSummary(summary *Summary) error {
 		summary.Content,
 		nullFloat64(summary.Temperature),
 		summary.PromptUsed,
+		nullInt(summary.PromptID),
 		nullFloat64(summary.ProcessingTimeSeconds),
 		nullString(summary.APIEndpoint),
 		nullString(summary.LocalModelPath),
@@ -301,7 +315,7 @@ func (db *DB) DeleteSummary(id int) error {
 func (db *DB) GetSummariesByDateRange(start, end time.Time, limit, offset int) ([]*Summary, error) {
 	query := `
 		SELECT id, transcript_id, content, summary_type, model_used,
-		       temperature, prompt_used, processing_time_seconds,
+		       temperature, prompt_used, prompt_id, processing_time_seconds,
 		       api_endpoint, local_model_path, created_at
 		FROM summaries
 		WHERE created_at >= ? AND created_at <= ?
@@ -321,6 +335,7 @@ func (db *DB) GetSummariesByDateRange(start, end time.Time, limit, offset int) (
 		var processingTimeSeconds sql.NullFloat64
 		var apiEndpoint sql.NullString
 		var localModelPath sql.NullString
+		var promptID sql.NullInt64
 
 		err := rows.Scan(
 			&summary.ID,
@@ -330,6 +345,7 @@ func (db *DB) GetSummariesByDateRange(start, end time.Time, limit, offset int) (
 			&summary.ModelUsed,
 			&temperature,
 			&summary.PromptUsed,
+			&promptID,
 			&processingTimeSeconds,
 			&apiEndpoint,
 			&localModelPath,
@@ -340,6 +356,7 @@ func (db *DB) GetSummariesByDateRange(start, end time.Time, limit, offset int) (
 		}
 
 		summary.Temperature = float64Ptr(temperature)
+		summary.PromptID = intPtrFromNull(promptID)
 		summary.ProcessingTimeSeconds = float64Ptr(processingTimeSeconds)
 		summary.APIEndpoint = stringPtr(apiEndpoint)
 		summary.LocalModelPath = stringPtr(localModelPath)
@@ -383,4 +400,59 @@ func (db *DB) GetSummaryStats() (map[string]int, error) {
 	}
 
 	return stats, nil
+}
+
+// GetSummariesByTranscriptID returns all summaries for a specific transcript
+func (db *DB) GetSummariesByTranscriptID(transcriptID int) ([]*Summary, error) {
+	query := `
+		SELECT id, transcript_id, content, summary_type, model_used,
+		       temperature, prompt_used, prompt_id, processing_time_seconds,
+		       api_endpoint, local_model_path, created_at
+		FROM summaries 
+		WHERE transcript_id = ? 
+		ORDER BY created_at DESC`
+
+	rows, err := db.Query(query, transcriptID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query summaries by transcript ID: %w", err)
+	}
+	defer rows.Close()
+
+	var summaries []*Summary
+	for rows.Next() {
+		var summary Summary
+		var temperature sql.NullFloat64
+		var processingTimeSeconds sql.NullFloat64
+		var apiEndpoint sql.NullString
+		var localModelPath sql.NullString
+		var promptID sql.NullInt64
+
+		err := rows.Scan(
+			&summary.ID,
+			&summary.TranscriptID,
+			&summary.Content,
+			&summary.SummaryType,
+			&summary.ModelUsed,
+			&temperature,
+			&summary.PromptUsed,
+			&promptID,
+			&processingTimeSeconds,
+			&apiEndpoint,
+			&localModelPath,
+			&summary.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan summary: %w", err)
+		}
+
+		summary.Temperature = float64Ptr(temperature)
+		summary.ProcessingTimeSeconds = float64Ptr(processingTimeSeconds)
+		summary.APIEndpoint = stringPtr(apiEndpoint)
+		summary.LocalModelPath = stringPtr(localModelPath)
+		summary.PromptID = intPtrFromNull(promptID)
+
+		summaries = append(summaries, &summary)
+	}
+
+	return summaries, nil
 }

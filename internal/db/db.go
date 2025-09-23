@@ -430,6 +430,7 @@ type Summary struct {
 	ModelUsed             string    `json:"model_used"`
 	Temperature           *float64  `json:"temperature,omitempty"`
 	PromptUsed            string    `json:"prompt_used"`
+	PromptID              *int      `json:"prompt_id,omitempty"`
 	ProcessingTimeSeconds *float64  `json:"processing_time_seconds,omitempty"`
 	APIEndpoint           *string   `json:"api_endpoint,omitempty"`
 	LocalModelPath        *string   `json:"local_model_path,omitempty"`
@@ -497,4 +498,17 @@ type ProcessingStats struct {
 	MinDuration *float64 `json:"min_duration,omitempty"`
 	MaxDuration *float64 `json:"max_duration,omitempty"`
 	Failures    int      `json:"failures"`
+}
+
+// Prompt represents a summarisation prompt configuration
+type Prompt struct {
+	ID          int       `json:"id"`
+	Name        string    `json:"name"`
+	DisplayName string    `json:"display_name"`
+	Description *string   `json:"description,omitempty"`
+	PromptText  string    `json:"prompt_text"`
+	IsDefault   bool      `json:"is_default"`
+	IsActive    bool      `json:"is_active"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }

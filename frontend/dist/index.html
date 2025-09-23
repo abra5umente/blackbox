@@ -24,6 +24,7 @@
     <div class="flex gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-blue-600 text-white ring-2 ring-blue-400 hover:bg-blue-700 transition-colors" data-tab="auto">Auto</div>
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="tools">Tools</div>
+      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="database">Database</div>
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="import">Import</div>
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="settings">Settings</div>
     </div>
@@ -245,6 +246,35 @@
         <div class="text-gray-300 text-sm mb-2">Formatted Output</div>
         <div id="toolsFormattedOutput" class="bg-gray-800 border border-gray-700 rounded-md p-4 max-h-96 overflow-auto prose prose-invert max-w-none">
           <!-- Formatted markdown content will be rendered here -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Database Tab - Manage recordings, transcripts, and summaries -->
+    <section id="database" class="page hidden p-4">
+      <h2 class="text-xl font-semibold text-white mb-4">Database Management</h2>
+      
+      <div class="mb-4">
+        <button id="btnRefreshDatabase" class="bg-green-500 hover:bg-green-600 text-white border-0 rounded-md px-4 py-2 cursor-pointer transition-colors">
+          Refresh Database
+        </button>
+      </div>
+
+      <!-- Recordings List -->
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold text-white mb-3">Recordings</h3>
+        <div id="databaseRecordings" class="space-y-3 max-h-96 overflow-y-auto">
+          <!-- Recordings will be populated here -->
+        </div>
+      </div>
+
+      <!-- Selected Item Details -->
+      <div id="databaseDetails" class="hidden">
+        <h3 class="text-lg font-semibold text-white mb-3">Details</h3>
+        <div class="bg-gray-800 border border-gray-700 rounded-md p-4">
+          <div id="databaseDetailsContent">
+            <!-- Details will be populated here -->
+          </div>
         </div>
       </div>
     </section>
@@ -791,7 +821,7 @@
           };
           await App().SaveSettings(JSON.stringify(updatedSettings));
           
-          const msg = await App().Summarise(txt);
+          const msg = await App().Summarise(p);
           document.getElementById('autoLog').textContent = 'Saved: ' + p + '\nTranscribing...\nTranscribed: ' + txt + '\nSummarising...\nSummary written to: ' + txt.replace('.txt', '_summary.txt');
           
           // Render formatted output (only the summary content, not system messages)
@@ -1197,6 +1227,184 @@
         setSelectedPrompt(e.target.value);
       });
 
+      // Database management functions
+      let databaseRecordings = [];
+
+      async function loadDatabaseRecordings() {
+        try {
+          document.getElementById('databaseRecordings').innerHTML = '<div class="text-gray-400">Loading recordings...</div>';
+          
+          const recordings = await App().GetRecordingsWithDetails(50, 0);
+          databaseRecordings = recordings;
+          
+          if (recordings.length === 0) {
+            document.getElementById('databaseRecordings').innerHTML = '<div class="text-gray-400">No recordings found</div>';
+            return;
+          }
+          
+          let html = '';
+          recordings.forEach(recording => {
+            const duration = recording.duration_seconds ? `${Math.round(recording.duration_seconds)}s` : 'Unknown';
+            const date = new Date(recording.created_at).toLocaleString();
+            const hasTranscript = recording.transcript_content ? 1 : 0;
+            const hasSummary = recording.summary_content ? 1 : 0;
+            
+            html += `
+              <div class="bg-gray-800 border border-gray-700 rounded-md p-3 cursor-pointer hover:bg-gray-700 transition-colors" 
+                   onclick="selectRecording(${recording.id})">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1">
+                    <div class="text-white font-medium">${recording.filename}</div>
+                    <div class="text-gray-400 text-sm">${recording.recording_mode} • ${duration} • ${date}</div>
+                    <div class="text-gray-500 text-xs">${hasTranscript} transcript • ${hasSummary} summary</div>
+                  </div>
+                  <div class="flex gap-2">
+                    <button onclick="event.stopPropagation(); playRecording(${recording.id})" 
+                            class="bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded transition-colors">
+                      Play
+                    </button>
+                    <button onclick="event.stopPropagation(); deleteRecording(${recording.id})" 
+                            class="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded transition-colors">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+          
+          document.getElementById('databaseRecordings').innerHTML = html;
+        } catch (error) {
+          document.getElementById('databaseRecordings').innerHTML = `<div class="text-red-400">Error loading recordings: ${error}</div>`;
+        }
+      }
+
+      function selectRecording(recordingId) {
+        const recording = databaseRecordings.find(r => r.id === recordingId);
+        if (!recording) return;
+        
+        let html = `
+          <div class="mb-4">
+            <h4 class="text-white font-medium mb-2">Recording Details</h4>
+            <div class="text-gray-300 text-sm space-y-1">
+              <div><strong>ID:</strong> ${recording.id}</div>
+              <div><strong>Filename:</strong> ${recording.filename}</div>
+              <div><strong>Mode:</strong> ${recording.recording_mode}</div>
+              <div><strong>Duration:</strong> ${recording.duration_seconds ? Math.round(recording.duration_seconds) + 's' : 'Unknown'}</div>
+              <div><strong>Sample Rate:</strong> ${recording.sample_rate} Hz</div>
+              <div><strong>Channels:</strong> ${recording.channels}</div>
+              <div><strong>Created:</strong> ${new Date(recording.created_at).toLocaleString()}</div>
+            </div>
+          </div>
+        `;
+        
+        if (recording.transcript_content) {
+          html += `
+            <div class="mb-4">
+              <h4 class="text-white font-medium mb-2">Transcript</h4>
+              <div class="bg-gray-900 border border-gray-600 rounded p-3">
+                <div class="flex justify-between items-start mb-2">
+                  <div class="text-gray-300 text-sm">
+                    <strong>Model:</strong> ${recording.transcript_model || 'Unknown'} • 
+                    <strong>Created:</strong> ${recording.transcribed_at ? new Date(recording.transcribed_at).toLocaleString() : 'Unknown'}
+                  </div>
+                  <button onclick="deleteTranscript(${recording.transcript_id})" 
+                          class="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded transition-colors">
+                    Delete
+                  </button>
+                </div>
+                <div class="text-gray-200 text-sm max-h-32 overflow-y-auto">
+                  ${recording.transcript_content.substring(0, 200)}${recording.transcript_content.length > 200 ? '...' : ''}
+                </div>
+              </div>
+            </div>
+          `;
+        }
+        
+        if (recording.summary_content) {
+          html += `
+            <div class="mb-4">
+              <h4 class="text-white font-medium mb-2">Summary</h4>
+              <div class="bg-gray-900 border border-gray-600 rounded p-3">
+                <div class="flex justify-between items-start mb-2">
+                  <div class="text-gray-300 text-sm">
+                    <strong>Type:</strong> ${recording.summary_type || 'Unknown'} • 
+                    <strong>Model:</strong> ${recording.summary_model || 'Unknown'} • 
+                    <strong>Created:</strong> ${recording.summarized_at ? new Date(recording.summarized_at).toLocaleString() : 'Unknown'}
+                  </div>
+                  <button onclick="deleteSummary(${recording.summary_id})" 
+                          class="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded transition-colors">
+                    Delete
+                  </button>
+                </div>
+                <div class="text-gray-200 text-sm max-h-32 overflow-y-auto">
+                  ${recording.summary_content.substring(0, 200)}${recording.summary_content.length > 200 ? '...' : ''}
+                </div>
+              </div>
+            </div>
+          `;
+        }
+        
+        document.getElementById('databaseDetailsContent').innerHTML = html;
+        document.getElementById('databaseDetails').classList.remove('hidden');
+      }
+
+      async function playRecording(recordingId) {
+        try {
+          const dataURL = await App().GetAudioDataURL(recordingId.toString());
+          const audio = new Audio(dataURL);
+          audio.play();
+        } catch (error) {
+          alert(`Error playing recording: ${error}`);
+        }
+      }
+
+      async function deleteRecording(recordingId) {
+        if (!confirm('Are you sure you want to delete this recording and all its transcripts and summaries?')) {
+          return;
+        }
+        
+        try {
+          await App().DeleteRecording(recordingId);
+          await loadDatabaseRecordings();
+          document.getElementById('databaseDetails').classList.add('hidden');
+        } catch (error) {
+          alert(`Error deleting recording: ${error}`);
+        }
+      }
+
+      async function deleteTranscript(transcriptId) {
+        if (!confirm('Are you sure you want to delete this transcript and all its summaries?')) {
+          return;
+        }
+        
+        try {
+          await App().DeleteTranscript(transcriptId);
+          await loadDatabaseRecordings();
+        } catch (error) {
+          alert(`Error deleting transcript: ${error}`);
+        }
+      }
+
+      async function deleteSummary(summaryId) {
+        if (!confirm('Are you sure you want to delete this summary?')) {
+          return;
+        }
+        
+        try {
+          await App().DeleteSummary(summaryId);
+          await loadDatabaseRecordings();
+        } catch (error) {
+          alert(`Error deleting summary: ${error}`);
+        }
+      }
+
+      // Refresh database button
+      document.getElementById('btnRefreshDatabase').addEventListener('click', async () => {
+        await loadDatabaseRecordings();
+        document.getElementById('databaseDetails').classList.add('hidden');
+      });
+
       // Tab switching
       document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', async () => {
         setActive(tab.dataset.tab);
@@ -1204,6 +1412,11 @@
         // Load recordings when Tools tab is activated
         if (tab.dataset.tab === 'tools') {
           await loadRecordingsForSelection();
+        }
+        
+        // Load database when Database tab is activated
+        if (tab.dataset.tab === 'database') {
+          await loadDatabaseRecordings();
         }
       }));
 

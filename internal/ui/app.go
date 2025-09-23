@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -56,7 +57,6 @@ type App struct {
 
 	// Prompt management
 	selectedPrompt string
-	promptCache    map[string]PromptConfig
 	promptMu       sync.RWMutex
 
 	uiCtx context.Context
@@ -82,13 +82,14 @@ func NewApp(settingsPath string) (*App, error) {
 		settings:       store,
 		database:       database,
 		selectedPrompt: "meeting", // Default to meeting prompt
-		promptCache:    make(map[string]PromptConfig),
 	}
 
-	// Load default prompts
-	if err := app.loadDefaultPrompts(); err != nil {
-		return nil, fmt.Errorf("failed to load default prompts: %w", err)
-	}
+	// Clean up old temporary files on startup
+	go func() {
+		if err := app.CleanupTempFiles(); err != nil {
+			fmt.Printf("Warning: failed to cleanup temporary files: %v\n", err)
+		}
+	}()
 
 	return app, nil
 }
@@ -151,19 +152,25 @@ func (a *App) SaveSettings(jsonStr string) (UISettings, error) {
 
 // --- Prompt Management API ---
 
-// GetAvailablePrompts returns a list of available prompt configurations
+// GetAvailablePrompts returns a list of available prompt configurations from the database
 func (a *App) GetAvailablePrompts() ([]PromptConfig, error) {
-	a.promptMu.RLock()
-	defer a.promptMu.RUnlock()
-
-	// Load custom prompts from config directory
-	if err := a.loadCustomPrompts(); err != nil {
-		// Log error but don't fail - custom prompts are optional
-		fmt.Printf("Warning: failed to load custom prompts: %v\n", err)
+	// Get active prompts from database
+	dbPrompts, err := a.database.GetActivePrompts()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get prompts from database: %w", err)
 	}
 
 	var prompts []PromptConfig
-	for _, prompt := range a.promptCache {
+	for _, dbPrompt := range dbPrompts {
+		description := ""
+		if dbPrompt.Description != nil {
+			description = *dbPrompt.Description
+		}
+		prompt := PromptConfig{
+			Name:        dbPrompt.DisplayName, // Use DisplayName as the main name
+			Description: description,
+			Prompt:      dbPrompt.PromptText,
+		}
 		prompts = append(prompts, prompt)
 	}
 
@@ -182,112 +189,75 @@ func (a *App) SetSelectedPrompt(promptName string) error {
 	a.promptMu.Lock()
 	defer a.promptMu.Unlock()
 
-	// Check if prompt exists
-	if _, exists := a.promptCache[promptName]; !exists {
-		return fmt.Errorf("prompt '%s' not found", promptName)
+	// Check if prompt exists in database
+	_, err := a.database.GetPromptByName(promptName)
+	if err != nil {
+		return fmt.Errorf("prompt '%s' not found: %w", promptName, err)
 	}
 
 	a.selectedPrompt = promptName
 	return nil
 }
 
-// GetPromptConfig returns the configuration for a specific prompt
+// GetPromptConfig returns the configuration for a specific prompt from the database
 func (a *App) GetPromptConfig(promptName string) (PromptConfig, error) {
-	a.promptMu.RLock()
-	defer a.promptMu.RUnlock()
+	dbPrompt, err := a.database.GetPromptByName(promptName)
+	if err != nil {
+		return PromptConfig{}, fmt.Errorf("prompt '%s' not found: %w", promptName, err)
+	}
 
-	prompt, exists := a.promptCache[promptName]
-	if !exists {
-		return PromptConfig{}, fmt.Errorf("prompt '%s' not found", promptName)
+	description := ""
+	if dbPrompt.Description != nil {
+		description = *dbPrompt.Description
+	}
+	prompt := PromptConfig{
+		Name:        dbPrompt.DisplayName, // Use DisplayName as the main name
+		Description: description,
+		Prompt:      dbPrompt.PromptText,
 	}
 
 	return prompt, nil
 }
 
-// SaveCustomPrompt saves a custom prompt configuration
+// SaveCustomPrompt saves a custom prompt configuration to the database
 func (a *App) SaveCustomPrompt(config PromptConfig) error {
 	if config.Name == "" {
 		return errors.New("prompt name is required")
 	}
 
-	// Ensure config directory exists
-	if err := os.MkdirAll("./config", 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	// Save to file
-	filename := fmt.Sprintf("./config/%s.json", config.Name)
-	data, err := json.MarshalIndent(config, "", "  ")
+	// Check if prompt already exists
+	exists, err := a.database.PromptExists(config.Name)
 	if err != nil {
-		return fmt.Errorf("failed to marshal prompt config: %w", err)
+		return fmt.Errorf("failed to check prompt existence: %w", err)
 	}
 
-	if err := os.WriteFile(filename, data, 0644); err != nil {
-		return fmt.Errorf("failed to write prompt file: %w", err)
+	description := config.Description
+	dbPrompt := &db.Prompt{
+		Name:        config.Name,
+		DisplayName: config.Name, // Use Name as DisplayName for custom prompts
+		Description: &description,
+		PromptText:  config.Prompt,
+		IsDefault:   false,
+		IsActive:    true,
 	}
 
-	// Update cache
-	a.promptMu.Lock()
-	a.promptCache[config.Name] = config
-	a.promptMu.Unlock()
-
-	return nil
-}
-
-// loadDefaultPrompts loads the built-in prompt configurations
-func (a *App) loadDefaultPrompts() error {
-	defaultPrompts := []string{"meeting", "dictation"}
-
-	for _, promptName := range defaultPrompts {
-		filename := fmt.Sprintf("./config/%s.json", promptName)
-		data, err := os.ReadFile(filename)
+	if exists {
+		// Update existing prompt
+		existingPrompt, err := a.database.GetPromptByName(config.Name)
 		if err != nil {
-			return fmt.Errorf("failed to read %s: %w", filename, err)
+			return fmt.Errorf("failed to get existing prompt: %w", err)
 		}
+		dbPrompt.ID = existingPrompt.ID
+		dbPrompt.CreatedAt = existingPrompt.CreatedAt
 
-		var config PromptConfig
-		if err := json.Unmarshal(data, &config); err != nil {
-			return fmt.Errorf("failed to parse %s: %w", filename, err)
+		if err := a.database.UpdatePrompt(dbPrompt); err != nil {
+			return fmt.Errorf("failed to update prompt in database: %w", err)
 		}
-
-		a.promptCache[promptName] = config
-	}
-
-	return nil
-}
-
-// loadCustomPrompts loads custom prompt files from the config directory
-func (a *App) loadCustomPrompts() error {
-	configDir := "./config"
-	entries, err := os.ReadDir(configDir)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
+	} else {
+		// Create new prompt
+		if err := a.database.CreatePrompt(dbPrompt); err != nil {
+			return fmt.Errorf("failed to create prompt in database: %w", err)
 		}
-
-		// Skip default prompts
-		if entry.Name() == "meeting.json" || entry.Name() == "dictation.json" {
-			continue
-		}
-
-		filename := filepath.Join(configDir, entry.Name())
-		data, err := os.ReadFile(filename)
-		if err != nil {
-			continue // Skip files that can't be read
-		}
-
-		var config PromptConfig
-		if err := json.Unmarshal(data, &config); err != nil {
-			continue // Skip files that can't be parsed
-		}
-
-		// Use filename without extension as key
-		promptName := strings.TrimSuffix(entry.Name(), ".json")
-		a.promptCache[promptName] = config
 	}
 
 	return nil
@@ -360,28 +330,33 @@ func (a *App) StopRecording() (string, error) {
 		return wavPath, fmt.Errorf("finalize wav: %w", err)
 	}
 
-	// Get final file size
-	fileInfo, err := os.Stat(wavPath)
+	// Read the WAV file data
+	audioData, err := os.ReadFile(wavPath)
 	if err != nil {
-		return wavPath, fmt.Errorf("stat wav file: %w", err)
+		return wavPath, fmt.Errorf("read wav file: %w", err)
 	}
 
 	// Calculate duration based on file size and audio format
 	// PCM S16LE, 16kHz, mono: 2 bytes per sample, 16000 samples per second
-	durationSeconds := float64(fileInfo.Size()) / (16000.0 * 2.0)
+	durationSeconds := float64(len(audioData)) / (16000.0 * 2.0)
 
-	// Update recording in database
+	// Update recording in database with audio data
 	dbRecording, err := a.database.GetRecording(a.recordingID)
 	if err != nil {
 		return wavPath, fmt.Errorf("failed to get recording from database: %w", err)
 	}
 
-	dbRecording.FileSize = fileInfo.Size()
+	dbRecording.FileSize = int64(len(audioData))
 	dbRecording.DurationSeconds = &durationSeconds
+	dbRecording.AudioData = audioData
 
 	if err := a.database.UpdateRecording(dbRecording); err != nil {
 		return wavPath, fmt.Errorf("failed to update recording in database: %w", err)
 	}
+
+	// Don't remove the temporary WAV file yet - keep it for potential transcription
+	// The file will be cleaned up later when no longer needed
+	// We'll keep it in the out directory for now
 
 	// Clear recording ID
 	a.recordingID = 0
@@ -389,14 +364,19 @@ func (a *App) StopRecording() (string, error) {
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		return wavPath, runErr
 	}
-	return wavPath, nil
+
+	// Return the recording ID as a string instead of file path
+	// This way the UI can use it for transcription
+	return fmt.Sprintf("%d", dbRecording.ID), nil
 }
 
-// Transcribe runs whisper.cpp on the selected WAV and returns the produced .txt path.
-func (a *App) Transcribe(wavPath string) (string, error) {
-	if strings.TrimSpace(wavPath) == "" {
-		return "", errors.New("wav path required")
+// Transcribe runs whisper.cpp on a recording and returns the transcript content.
+// It accepts either a WAV file path (for backwards compatibility) or a recording ID.
+func (a *App) Transcribe(wavPathOrID string) (string, error) {
+	if strings.TrimSpace(wavPathOrID) == "" {
+		return "", errors.New("wav path or recording ID required")
 	}
+
 	cfg := a.settings.Get()
 	outDir := cfg.OutDir
 	if outDir == "" {
@@ -410,6 +390,35 @@ func (a *App) Transcribe(wavPath string) (string, error) {
 	modelDir := getenvDefault("LOOPBACK_NOTES_MODELS", "./models")
 	modelPath := filepath.Join(modelDir, "ggml-base.en.bin")
 
+	var dbRecording *db.Recording
+	var wavPath string
+	var err error
+
+	// Check if it's a numeric ID (recording ID from database)
+	if _, err := strconv.Atoi(wavPathOrID); err == nil {
+		// It's a recording ID
+		recordingID, _ := strconv.Atoi(wavPathOrID)
+		dbRecording, err = a.database.GetRecording(recordingID)
+		if err != nil {
+			return "", fmt.Errorf("failed to get recording from database: %w", err)
+		}
+
+		// Create temporary WAV file from database audio data
+		wavPath = filepath.Join(outDir, dbRecording.Filename)
+		if err := os.WriteFile(wavPath, dbRecording.AudioData, 0644); err != nil {
+			return "", fmt.Errorf("failed to create temporary WAV file: %w", err)
+		}
+		defer os.Remove(wavPath) // Clean up temporary file
+	} else {
+		// It's a file path (backwards compatibility)
+		wavPath = wavPathOrID
+		filename := filepath.Base(wavPath)
+		dbRecording, err = a.database.GetRecordingByFilename(filename)
+		if err != nil {
+			return "", fmt.Errorf("failed to find recording in database: %w", err)
+		}
+	}
+
 	startTime := time.Now()
 	txtPath, err := execx.RunWhisper(whisperBin, modelPath, wavPath, outDir, "en", 0, "")
 	if err != nil {
@@ -420,13 +429,6 @@ func (a *App) Transcribe(wavPath string) (string, error) {
 	transcriptContent, err := os.ReadFile(txtPath)
 	if err != nil {
 		return txtPath, fmt.Errorf("failed to read transcript file: %w", err)
-	}
-
-	// Find recording by filename
-	filename := filepath.Base(wavPath)
-	dbRecording, err := a.database.GetRecordingByFilename(filename)
-	if err != nil {
-		return txtPath, fmt.Errorf("failed to find recording in database: %w", err)
 	}
 
 	// Calculate processing time
@@ -445,7 +447,16 @@ func (a *App) Transcribe(wavPath string) (string, error) {
 		return txtPath, fmt.Errorf("failed to save transcript to database: %w", err)
 	}
 
-	return txtPath, nil
+	// Clean up temporary WAV file if it was created from database
+	if dbRecording != nil && wavPathOrID != wavPath {
+		// This was a temporary file created from database data, clean it up
+		if err := os.Remove(wavPath); err != nil {
+			fmt.Printf("Warning: failed to remove temporary WAV file %s: %v\n", wavPath, err)
+		}
+	}
+
+	// Return the transcript content instead of file path
+	return string(transcriptContent), nil
 }
 
 // Summarise reads configs/llm.json and sends the transcript to OpenAI or local AI for summarisation.
@@ -458,6 +469,8 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 
 	var transcript string
 	var err error
+
+	var dbRecording *db.Recording
 
 	// Check if it's a file path (for backwards compatibility)
 	if _, err := os.Stat(txtPathOrID); err == nil {
@@ -472,13 +485,14 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		var recordingID int
 		if _, parseErr := fmt.Sscanf(txtPathOrID, "%d", &recordingID); parseErr == nil {
 			// It's a recording ID, get transcript from database
-			recording, dbErr := a.database.GetRecording(recordingID)
+			var dbErr error
+			dbRecording, dbErr = a.database.GetRecording(recordingID)
 			if dbErr != nil {
 				return "", fmt.Errorf("failed to get recording from database: %v", dbErr)
 			}
 
 			// Get the transcript for this recording
-			dbTranscript, transErr := a.database.GetTranscriptByRecordingID(recording.ID)
+			dbTranscript, transErr := a.database.GetTranscriptByRecordingID(dbRecording.ID)
 			if transErr != nil {
 				return "", fmt.Errorf("failed to get transcript from database: %v", transErr)
 			}
@@ -494,6 +508,12 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		return "", fmt.Errorf("failed to get prompt config: %w", err)
 	}
 	prompt := promptConfig.Prompt
+
+	// Get the prompt from database to get the ID
+	dbPrompt, err := a.database.GetPromptByName(a.GetSelectedPrompt())
+	if err != nil {
+		return "", fmt.Errorf("failed to get prompt from database: %w", err)
+	}
 
 	var summary string
 
@@ -537,23 +557,15 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		}
 	}
 
-	// Find transcript by filename (only if it's a file path)
-	var dbRecording *db.Recording
-	var transcriptErr error
-
-	if _, err := os.Stat(txtPathOrID); err == nil {
-		// It's a file path
+	// If we have a file path, we need to find the recording by filename
+	if dbRecording == nil {
+		// It's a file path, find the recording
 		txtFilename := filepath.Base(txtPathOrID)
 		wavFilename := strings.TrimSuffix(txtFilename, ".txt") + ".wav"
+		var transcriptErr error
 		dbRecording, transcriptErr = a.database.GetRecordingByFilename(wavFilename)
 		if transcriptErr != nil {
 			return "", fmt.Errorf("failed to find recording: %w", transcriptErr)
-		}
-	} else {
-		// It's a recording ID, we already have the recording from earlier
-		// dbRecording should already be set from the earlier database lookup
-		if dbRecording == nil {
-			return "", fmt.Errorf("recording not found for ID: %s", txtPathOrID)
 		}
 	}
 
@@ -586,6 +598,7 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		SummaryType:    a.GetSelectedPrompt(),
 		ModelUsed:      modelUsed,
 		PromptUsed:     prompt,
+		PromptID:       &dbPrompt.ID,
 		APIEndpoint:    apiEndpoint,
 		LocalModelPath: localModelPath,
 	}
@@ -814,13 +827,15 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 
 	startTime := time.Now()
 	ts := startTime.Format("20060102_150405")
+
+	// Create a temporary file for recording (we'll store the data in DB later)
 	wavPath := filepath.Join(cfg.OutDir, ts+".wav")
 	writer, err := wav.NewWriter(wavPath, sampleRate, uint16(channels), bits)
 	if err != nil {
 		return "", fmt.Errorf("open wav: %w", err)
 	}
 
-	// Create recording entry in database
+	// Create recording entry in database (without audio data initially)
 	recordingMode := "loopback"
 	if dictation {
 		recordingMode = "dictation"
@@ -839,6 +854,7 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 		RecordingMode:  recordingMode,
 		WithMicrophone: withMic,
 		RecordedAt:     &startTime, // Store when recording started
+		AudioData:      nil,        // Will be populated when recording stops
 	}
 
 	if err := a.database.CreateRecording(dbRecording); err != nil {
@@ -1026,6 +1042,173 @@ func (a *App) GetRecordingByID(id int) (*db.Recording, error) {
 	}
 
 	return a.database.GetRecording(id)
+}
+
+// CleanupTempFiles removes temporary WAV files from the output directory
+// that are older than 1 hour and have corresponding database entries
+func (a *App) CleanupTempFiles() error {
+	cfg := a.settings.Get()
+	outDir := cfg.OutDir
+	if outDir == "" {
+		outDir = "./out"
+	}
+
+	// Read directory contents
+	files, err := os.ReadDir(outDir)
+	if err != nil {
+		return fmt.Errorf("failed to read output directory: %w", err)
+	}
+
+	cutoff := time.Now().Add(-1 * time.Hour) // Files older than 1 hour
+
+	for _, file := range files {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".wav") {
+			continue
+		}
+
+		// Check if file is older than cutoff
+		info, err := file.Info()
+		if err != nil {
+			continue
+		}
+
+		if info.ModTime().After(cutoff) {
+			continue // File is too recent
+		}
+
+		// Check if this file exists in the database
+		_, err = a.database.GetRecordingByFilename(file.Name())
+		if err == nil {
+			// File exists in database, safe to remove
+			filePath := filepath.Join(outDir, file.Name())
+			if err := os.Remove(filePath); err != nil {
+				fmt.Printf("Warning: failed to remove old temporary file %s: %v\n", filePath, err)
+			} else {
+				fmt.Printf("Cleaned up old temporary file: %s\n", filePath)
+			}
+		}
+	}
+
+	return nil
+}
+
+// GetWavPathForRecording returns the WAV file path for a recording ID
+// If the file doesn't exist, it creates a temporary one from database data
+func (a *App) GetWavPathForRecording(recordingID int) (string, error) {
+	if a.database == nil {
+		return "", errors.New("database not initialized")
+	}
+
+	recording, err := a.database.GetRecording(recordingID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get recording: %w", err)
+	}
+
+	cfg := a.settings.Get()
+	outDir := cfg.OutDir
+	if outDir == "" {
+		outDir = "./out"
+	}
+
+	wavPath := filepath.Join(outDir, recording.Filename)
+
+	// Check if file exists
+	if _, err := os.Stat(wavPath); err == nil {
+		// File exists, return the path
+		return wavPath, nil
+	}
+
+	// File doesn't exist, create it from database data
+	if recording.AudioData == nil {
+		return "", fmt.Errorf("no audio data available for recording %d", recordingID)
+	}
+
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	if err := os.WriteFile(wavPath, recording.AudioData, 0644); err != nil {
+		return "", fmt.Errorf("failed to create WAV file: %w", err)
+	}
+
+	return wavPath, nil
+}
+
+// DeleteRecording deletes a recording and all associated transcripts and summaries
+func (a *App) DeleteRecording(recordingID int) error {
+	if a.database == nil {
+		return errors.New("database not initialized")
+	}
+
+	// Get recording first to check if it exists
+	recording, err := a.database.GetRecording(recordingID)
+	if err != nil {
+		return fmt.Errorf("failed to get recording: %w", err)
+	}
+
+	// Delete the recording (this will cascade delete transcripts and summaries)
+	if err := a.database.DeleteRecording(recordingID); err != nil {
+		return fmt.Errorf("failed to delete recording: %w", err)
+	}
+
+	// Also try to clean up any remaining WAV file
+	cfg := a.settings.Get()
+	outDir := cfg.OutDir
+	if outDir == "" {
+		outDir = "./out"
+	}
+	wavPath := filepath.Join(outDir, recording.Filename)
+	if err := os.Remove(wavPath); err != nil {
+		// Don't fail if file doesn't exist or can't be removed
+		fmt.Printf("Warning: failed to remove WAV file %s: %v\n", wavPath, err)
+	}
+
+	return nil
+}
+
+// DeleteTranscript deletes a transcript and all associated summaries
+func (a *App) DeleteTranscript(transcriptID int) error {
+	if a.database == nil {
+		return errors.New("database not initialized")
+	}
+
+	return a.database.DeleteTranscript(transcriptID)
+}
+
+// DeleteSummary deletes a summary
+func (a *App) DeleteSummary(summaryID int) error {
+	if a.database == nil {
+		return errors.New("database not initialized")
+	}
+
+	return a.database.DeleteSummary(summaryID)
+}
+
+// GetRecordingsWithDetails returns recordings with their transcripts and summaries
+func (a *App) GetRecordingsWithDetails(limit int, offset int) ([]*db.RecordingWithDetails, error) {
+	if a.database == nil {
+		return nil, errors.New("database not initialized")
+	}
+
+	return a.database.GetRecordingsWithDetails(limit, offset)
+}
+
+// GetTranscriptsByRecordingID returns all transcripts for a recording
+func (a *App) GetTranscriptsByRecordingID(recordingID int) ([]*db.Transcript, error) {
+	if a.database == nil {
+		return nil, errors.New("database not initialized")
+	}
+
+	return a.database.GetTranscriptsByRecordingID(recordingID)
+}
+
+// GetSummariesByTranscriptID returns all summaries for a transcript
+func (a *App) GetSummariesByTranscriptID(transcriptID int) ([]*db.Summary, error) {
+	if a.database == nil {
+		return nil, errors.New("database not initialized")
+	}
+
+	return a.database.GetSummariesByTranscriptID(transcriptID)
 }
 
 // PickTxtFromOutDir opens a file picker defaulting to OutDir filtered to .txt

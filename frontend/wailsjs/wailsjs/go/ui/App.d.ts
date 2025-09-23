@@ -4,7 +4,15 @@ import {ui} from '../models';
 import {db} from '../models';
 import {context} from '../models';
 
+export function CleanupTempFiles():Promise<void>;
+
 export function Close():Promise<void>;
+
+export function DeleteRecording(arg1:number):Promise<void>;
+
+export function DeleteSummary(arg1:number):Promise<void>;
+
+export function DeleteTranscript(arg1:number):Promise<void>;
 
 export function GetAudioDataURL(arg1:string):Promise<string>;
 
@@ -18,11 +26,19 @@ export function GetRecordingByID(arg1:number):Promise<db.Recording>;
 
 export function GetRecordingFilePath(arg1:number):Promise<string>;
 
+export function GetRecordingsWithDetails(arg1:number,arg2:number):Promise<Array<db.RecordingWithDetails>>;
+
 export function GetSelectedPrompt():Promise<string>;
 
 export function GetSettings():Promise<ui.UISettings>;
 
+export function GetSummariesByTranscriptID(arg1:number):Promise<Array<db.Summary>>;
+
 export function GetTranscriptContent(arg1:number):Promise<string>;
+
+export function GetTranscriptsByRecordingID(arg1:number):Promise<Array<db.Transcript>>;
+
+export function GetWavPathForRecording(arg1:number):Promise<string>;
 
 export function ImportData(arg1:string,arg2:boolean,arg3:boolean):Promise<Record<string, any>>;
 

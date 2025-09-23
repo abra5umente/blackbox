@@ -150,6 +150,106 @@ export namespace db {
 		    return a;
 		}
 	}
+	export class Summary {
+	    id: number;
+	    transcript_id: number;
+	    content: string;
+	    summary_type: string;
+	    model_used: string;
+	    temperature?: number;
+	    prompt_used: string;
+	    prompt_id?: number;
+	    processing_time_seconds?: number;
+	    api_endpoint?: string;
+	    local_model_path?: string;
+	    // Go type: time
+	    created_at: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new Summary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.transcript_id = source["transcript_id"];
+	        this.content = source["content"];
+	        this.summary_type = source["summary_type"];
+	        this.model_used = source["model_used"];
+	        this.temperature = source["temperature"];
+	        this.prompt_used = source["prompt_used"];
+	        this.prompt_id = source["prompt_id"];
+	        this.processing_time_seconds = source["processing_time_seconds"];
+	        this.api_endpoint = source["api_endpoint"];
+	        this.local_model_path = source["local_model_path"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Transcript {
+	    id: number;
+	    recording_id: number;
+	    content: string;
+	    confidence_score?: number;
+	    model_used: string;
+	    language: string;
+	    processing_time_seconds?: number;
+	    whisper_version?: string;
+	    // Go type: time
+	    created_at: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new Transcript(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.recording_id = source["recording_id"];
+	        this.content = source["content"];
+	        this.confidence_score = source["confidence_score"];
+	        this.model_used = source["model_used"];
+	        this.language = source["language"];
+	        this.processing_time_seconds = source["processing_time_seconds"];
+	        this.whisper_version = source["whisper_version"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 
