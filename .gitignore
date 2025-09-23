@@ -68,6 +68,5 @@ config/ui.json
 *.log
 *.log.*
 
-data/blackbox.db
-data/blackbox.db-wal
-data/blackbox.db-shm
+# database files
+data/*
