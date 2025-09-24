@@ -30,10 +30,6 @@ export function GetAvailablePrompts() {
   return window['go']['ui']['App']['GetAvailablePrompts']();
 }
 
-export function GetImportProgress() {
-  return window['go']['ui']['App']['GetImportProgress']();
-}
-
 export function GetPromptConfig(arg1) {
   return window['go']['ui']['App']['GetPromptConfig'](arg1);
 }
@@ -72,10 +68,6 @@ export function GetTranscriptsByRecordingID(arg1) {
 
 export function GetWavPathForRecording(arg1) {
   return window['go']['ui']['App']['GetWavPathForRecording'](arg1);
-}
-
-export function ImportData(arg1, arg2, arg3) {
-  return window['go']['ui']['App']['ImportData'](arg1, arg2, arg3);
 }
 
 export function IsRecording() {
@@ -144,8 +136,4 @@ export function Summarise(arg1) {
 
 export function Transcribe(arg1) {
   return window['go']['ui']['App']['Transcribe'](arg1);
-}
-
-export function ValidateImportDirectory(arg1) {
-  return window['go']['ui']['App']['ValidateImportDirectory'](arg1);
 }

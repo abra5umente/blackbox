@@ -16,6 +16,81 @@
     
     <link href="/output.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    <style>
+      /* Custom styles to fix database layout issues */
+      #databaseRecordings {
+        position: relative;
+        z-index: 1;
+      }
+      
+      #databaseRecordings > div {
+        position: relative;
+        z-index: 2;
+        margin-bottom: 0.75rem;
+      }
+      
+      #databaseDetails {
+        position: relative;
+        z-index: 1;
+        margin-top: 1rem;
+      }
+      
+      #databaseDetailsContent {
+        position: relative;
+        z-index: 2;
+      }
+      
+      .space-y-3 > * + * {
+        margin-top: 0.75rem;
+      }
+      
+      .min-w-0 {
+        min-width: 0;
+      }
+      
+      .flex-shrink-0 {
+        flex-shrink: 0;
+      }
+      
+      .truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      
+      .break-words {
+        overflow-wrap: break-word;
+        word-wrap: break-word;
+        word-break: break-word;
+      }
+      
+      /* Custom scrollbar styling for text areas */
+      .overflow-y-auto::-webkit-scrollbar {
+        width: 8px;
+      }
+      
+      .overflow-y-auto::-webkit-scrollbar-track {
+        background: #374151;
+        border-radius: 4px;
+      }
+      
+      .overflow-y-auto::-webkit-scrollbar-thumb {
+        background: #6b7280;
+        border-radius: 4px;
+      }
+      
+      .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af;
+      }
+      
+      /* Ensure text areas have proper height and scrolling */
+      .text-content-area {
+        min-height: 120px;
+        max-height: 200px;
+        overflow-y: auto;
+        resize: vertical;
+      }
+    </style>
   </head>
   <body class="font-sans m-0 text-gray-200 bg-gray-900">
     <header class="px-4 py-3 bg-gray-800 border-b border-gray-700">
@@ -25,7 +100,6 @@
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-blue-600 text-white ring-2 ring-blue-400 hover:bg-blue-700 transition-colors" data-tab="auto">Auto</div>
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="tools">Tools</div>
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="database">Database</div>
-      <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="import">Import</div>
       <div class="tab px-3 py-2 rounded-md cursor-pointer bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors" data-tab="settings">Settings</div>
     </div>
 
@@ -263,7 +337,7 @@
       <!-- Recordings List -->
       <div class="mb-6">
         <h3 class="text-lg font-semibold text-white mb-3">Recordings</h3>
-        <div id="databaseRecordings" class="space-y-3 max-h-96 overflow-y-auto">
+        <div id="databaseRecordings" class="space-y-3 max-h-96 overflow-y-auto border border-gray-700 rounded-md p-2">
           <!-- Recordings will be populated here -->
         </div>
       </div>
@@ -271,7 +345,7 @@
       <!-- Selected Item Details -->
       <div id="databaseDetails" class="hidden">
         <h3 class="text-lg font-semibold text-white mb-3">Details</h3>
-        <div class="bg-gray-800 border border-gray-700 rounded-md p-4">
+        <div class="bg-gray-800 border border-gray-700 rounded-md p-4 max-h-96 overflow-y-auto">
           <div id="databaseDetailsContent">
             <!-- Details will be populated here -->
           </div>
@@ -279,64 +353,6 @@
       </div>
     </section>
 
-    <!-- Import Tab - Import existing data -->
-    <section id="import" class="page hidden p-4">
-      <div class="bg-gray-800 border border-gray-700 rounded-md p-4">
-        <h3 class="text-lg font-semibold text-white mb-3">Import Existing Data</h3>
-        <div class="text-gray-400 text-sm mb-4">Import recordings, transcripts, and summaries from an existing directory into the database.</div>
-
-        <div class="my-3">
-          <label class="block mb-2 text-gray-300">Import Directory</label>
-          <div class="flex gap-2">
-            <input type="text" id="importDir" placeholder="./out" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            <button id="btnPickImportDir" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors">Browse</button>
-          </div>
-          <div class="text-gray-400 text-xs mt-1">Directory containing WAV files, transcripts (.txt), and summaries</div>
-        </div>
-
-        <div class="my-3">
-          <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
-            <input type="checkbox" id="importDryRun" class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
-            Dry run (preview only, no data imported)
-          </label>
-        </div>
-
-        <div class="my-3">
-          <label class="flex items-center gap-2 text-gray-300 cursor-pointer">
-            <input type="checkbox" id="importAutoDetectMode" checked class="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
-            Auto-detect recording modes from content
-          </label>
-        </div>
-
-        <div class="my-3">
-          <label class="block mb-2 text-gray-300">Default Recording Mode (if auto-detection disabled)</label>
-          <select id="importDefaultMode" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-            <option value="loopback">Loopback (system audio)</option>
-            <option value="dictation">Dictation (microphone only)</option>
-            <option value="mixed">Mixed (system + microphone)</option>
-          </select>
-        </div>
-
-        <div class="my-3">
-          <button id="btnValidateImport" class="bg-green-500 hover:bg-green-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors">Validate Directory</button>
-          <button id="btnImportData" class="bg-blue-500 hover:bg-blue-600 text-white border-0 rounded-md px-3 py-2 cursor-pointer transition-colors ml-2" disabled>Import Data</button>
-        </div>
-
-        <!-- Validation Results -->
-        <div id="importValidationResults" class="my-3 hidden">
-          <div class="text-gray-300 text-sm mb-2">Directory Contents</div>
-          <div class="bg-gray-900 border border-gray-700 rounded-md p-3 text-sm">
-            <div id="importValidationText">Validating...</div>
-          </div>
-        </div>
-
-        <!-- Import Log -->
-        <div class="my-3">
-          <div class="text-gray-300 text-sm mb-2">Import Log</div>
-          <div id="importLog" class="whitespace-pre-wrap bg-gray-900 border border-gray-700 rounded-md p-3 max-h-48 overflow-auto text-sm"></div>
-        </div>
-      </div>
-    </section>
 
     <section id="settings" class="page hidden p-4">
       <div class="my-3">
@@ -1142,78 +1158,6 @@
         }
       };
 
-      // Import functionality
-      let importDirPath = './out';
-
-      document.getElementById('btnPickImportDir').onclick = async () => {
-        try {
-          // For now, we'll use a simple prompt since we don't have a directory picker
-          const dir = prompt('Enter import directory path:', './out');
-          if (dir) {
-            importDirPath = dir;
-            document.getElementById('importDir').value = dir;
-          }
-        } catch (e) {
-          console.error('Failed to pick import directory:', e);
-        }
-      };
-
-      document.getElementById('btnValidateImport').onclick = async () => {
-        const validationResults = document.getElementById('importValidationResults');
-        const validationText = document.getElementById('importValidationText');
-
-        validationResults.classList.remove('hidden');
-        validationText.textContent = 'Validating...';
-
-        try {
-          const result = await App().ValidateImportDirectory(importDirPath);
-          if (result.valid) {
-            const files = result.wav_files + result.transcripts + result.summaries;
-            validationText.textContent = `Found ${result.wav_files} WAV files, ${result.transcripts} transcripts, and ${result.summaries} summaries (total: ${files} files)`;
-            document.getElementById('btnImportData').disabled = false;
-          } else {
-            validationText.textContent = 'Directory validation failed';
-            document.getElementById('btnImportData').disabled = true;
-          }
-        } catch (e) {
-          validationText.textContent = 'Validation error: ' + e;
-          document.getElementById('btnImportData').disabled = true;
-        }
-      };
-
-      document.getElementById('btnImportData').onclick = async () => {
-        const logElement = document.getElementById('importLog');
-        const btn = document.getElementById('btnImportData');
-
-        logElement.textContent = 'Starting import...\n';
-        btn.disabled = true;
-
-        try {
-          const dryRun = document.getElementById('importDryRun').checked;
-          const autoDetectMode = document.getElementById('importAutoDetectMode').checked;
-
-          logElement.textContent += `Importing from: ${importDirPath}\n`;
-          logElement.textContent += `Dry run: ${dryRun ? 'Yes' : 'No'}\n`;
-          logElement.textContent += `Auto-detect mode: ${autoDetectMode ? 'Yes' : 'No'}\n`;
-          logElement.textContent += 'Running import...\n\n';
-
-          const result = await App().ImportData(importDirPath, dryRun, autoDetectMode);
-
-          logElement.textContent += result.stdout + '\n';
-          if (result.stderr) {
-            logElement.textContent += 'Warnings/Errors:\n' + result.stderr + '\n';
-          }
-
-          logElement.textContent += '\n' + result.message;
-
-          // Re-enable button
-          btn.disabled = false;
-
-        } catch (e) {
-          logElement.textContent += '\nImport failed: ' + e;
-          btn.disabled = false;
-        }
-      };
 
       // Initialize spectrum analyser for auto tab
       const autoSpectrum = new RealSpectrumAnalyser('autoSpectrum');
@@ -1250,15 +1194,15 @@
             const hasSummary = recording.summary_content ? 1 : 0;
             
             html += `
-              <div class="bg-gray-800 border border-gray-700 rounded-md p-3 cursor-pointer hover:bg-gray-700 transition-colors" 
+              <div class="bg-gray-800 border border-gray-700 rounded-md p-3 mb-3 cursor-pointer hover:bg-gray-700 transition-colors" 
                    onclick="selectRecording(${recording.id})">
                 <div class="flex justify-between items-start">
-                  <div class="flex-1">
-                    <div class="text-white font-medium">${recording.filename}</div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-white font-medium truncate">${recording.filename}</div>
                     <div class="text-gray-400 text-sm">${recording.recording_mode} • ${duration} • ${date}</div>
                     <div class="text-gray-500 text-xs">${hasTranscript} transcript • ${hasSummary} summary</div>
                   </div>
-                  <div class="flex gap-2">
+                  <div class="flex gap-2 flex-shrink-0 ml-2">
                     <button onclick="event.stopPropagation(); playRecording(${recording.id})" 
                             class="bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded transition-colors">
                       Play
@@ -1313,8 +1257,8 @@
                     Delete
                   </button>
                 </div>
-                <div class="text-gray-200 text-sm max-h-32 overflow-y-auto">
-                  ${recording.transcript_content.substring(0, 200)}${recording.transcript_content.length > 200 ? '...' : ''}
+                <div class="text-gray-200 text-sm text-content-area break-words whitespace-pre-wrap p-3 bg-gray-800 rounded border">
+                  ${recording.transcript_content}
                 </div>
               </div>
             </div>
@@ -1337,8 +1281,8 @@
                     Delete
                   </button>
                 </div>
-                <div class="text-gray-200 text-sm max-h-32 overflow-y-auto">
-                  ${recording.summary_content.substring(0, 200)}${recording.summary_content.length > 200 ? '...' : ''}
+                <div class="text-gray-200 text-sm text-content-area break-words whitespace-pre-wrap p-3 bg-gray-800 rounded border">
+                  ${recording.summary_content}
                 </div>
               </div>
             </div>

@@ -1,6 +1,6 @@
 # Blackbox
 
-A Windows-only meeting & dictation recorder, featuring local transcription, and automatic summarisation.
+A Windows-only meeting & dictation recorder, featuring local transcription, AI-powered summarisation, and comprehensive database management.
 
 <img width="1007" height="1119" alt="image" src="https://github.com/user-attachments/assets/89d1fac6-a8c8-4f87-a518-2b839aae6e9f" />  
 
@@ -12,6 +12,9 @@ A Windows-only meeting & dictation recorder, featuring local transcription, and 
 - **AI-Powered Summarisation**: Use any OpenAI compatible API endpoint (instructions included for local [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master) usage)
 - **Secure Audio Playback**: In-GUI audio players for listening to recorded WAV files
 - **Formatted Output**: Markdown rendering for transcripts and summaries
+- **Database Management**: SQLite database with full-text search and metadata tracking
+- **Multiple Prompt Types**: Meeting, dictation, and technical summarization prompts
+- **Tagging System**: Organize recordings with color-coded tags
 - **Small Footprint**: Less than 15mb executable  
 - **Audio Mixing**: User-selectable combinations of system and microphone audio
 - **Flexible Output**: Configurable output directories and file naming
@@ -20,7 +23,7 @@ The GUI features a streamlined interface with three main tabs:
 
 - **Auto Tab**: Complete workflow combining recording, transcription, and summarisation with live audio feedback and formatted output
 - **Tools Tab**: Individual tools for recording, transcribing, and summarising with audio playback and formatted output
-- **Settings Tab**: Configuration management including local AI settings
+- **Settings Tab**: Configuration management including local AI settings and database options
 
 ## Quick Start
 
@@ -49,7 +52,13 @@ cp .\build\bin\blackbox-gui.exe .\blackbox-gui.exe
 **GUI Settings** (`./config/ui.json` - auto-created):
 ```json
 {
-  "out_dir": "./out"
+  "out_dir": "./out",
+  "database_path": "./data/blackbox.db",
+  "use_local_ai": false,
+  "llama_temp": 0.1,
+  "llama_context": 32000,
+  "llama_model": "",
+  "llama_api_key": ""
 }
 ```
 
@@ -57,10 +66,15 @@ cp .\build\bin\blackbox-gui.exe .\blackbox-gui.exe
 ```json
 {
   "base_url": "http://localhost:8080",
-  "api_key_env": "llama.cpp API key",
+  "api_key": "llama.cpp API key",
   "model": "model_name"
 }
 ```
+
+**Prompt Configurations** (`./config/` directory):
+- `meeting.json` - Comprehensive meeting summarization
+- `dictation.json` - Single-speaker dictation summarization  
+- `technical.json` - Technical documentation summarization
 
 ## AI Summarisation
 
@@ -143,10 +157,11 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 }
 ```
 
-#### App Settings (+ Local AI Server Parameters) (`./configs/ui.json)
+#### App Settings (+ Local AI Server Parameters) (`./config/ui.json`)
 ```json
 {
   "out_dir": "./out",
+  "database_path": "./data/blackbox.db",
   "use_local_ai": true,
   "llama_model": "./models/gemma-3-12b-it-q4_0.gguf",
   "llama_temp": 0.1,
@@ -154,6 +169,25 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
   "llama_api_key": "1234"
 }
 ```
+
+## Database Features
+
+Blackbox includes a comprehensive SQLite database for managing all recordings, transcripts, and summaries:
+
+### Key Features
+- **Full Metadata Tracking**: Complete recording information including duration, sample rate, channels, and recording mode
+- **Full-Text Search**: Search across all transcripts using SQLite FTS5
+- **Tagging System**: Organize recordings with color-coded tags
+- **Processing History**: Track transcription and summarization performance
+- **Data Integrity**: Foreign key constraints and data validation
+- **Views and Indexes**: Optimized queries for common operations
+
+### Database Schema
+- **recordings**: Audio file metadata and user notes
+- **transcripts**: Transcription data with confidence scores
+- **summaries**: AI-generated summaries with prompt tracking
+- **tags**: Flexible organization system
+- **processing_metadata**: Performance and error tracking
 
 ## Build and Development
 
@@ -175,11 +209,13 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 1. Open Blackbox
 2. Click on the **Auto** tab
 3. Select which mode you want to record in (desktop only (untick Use Microphone), desktop + microphone, or microphone only (dictation mode))
-4. Begin your meeting/dictation
-5. Once done, click "Stop Recording"
-6. The application will automatically transcribe + summarise your recording
-7. Listen to your recording using the built-in audio player
-8. View formatted output in the dedicated markdown section
+4. Choose your summarization prompt type (Meeting, Dictation, or Technical)
+5. Begin your meeting/dictation
+6. Once done, click "Stop Recording"
+7. The application will automatically transcribe + summarise your recording
+8. Listen to your recording using the built-in audio player
+9. View formatted output in the dedicated markdown section
+10. All data is automatically stored in the database for future reference
 
 ### Advanced Recording Modes
 - **Loopback Only**: System audio capture with spectrum visualisation
@@ -191,6 +227,10 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 - **Formatted Output**: Transcripts and summaries are rendered as beautiful markdown
 - **System Messages**: Clear status updates separate from formatted content
 - **Real-time Feedback**: Live spectrum analyser shows audio activity during recording
+- **Database Management**: Full CRUD operations for recordings and metadata
+- **Search Functionality**: Full-text search across all transcripts
+- **Tagging System**: Organize recordings with color-coded tags
+- **Prompt Selection**: Choose from Meeting, Dictation, or Technical summarization styles
 
 ## Troubleshooting
 
@@ -201,6 +241,9 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 4. **GUI Not Responding**: Ensure WebView2 runtime is installed
 5. **Audio Playback Not Working**: Check browser console for errors, verify WAV file exists
 6. **Markdown Not Rendering**: Ensure internet connection for marked.js CDN, check browser console
+7. **Database Errors**: Check database file permissions and ensure migrations are applied
+8. **Search Not Working**: Verify FTS5 extension is available in SQLite
+9. **Prompt Loading Fails**: Check prompt JSON file syntax and structure
 
 ## Future Enhancements
 
@@ -209,6 +252,13 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 - [ ] Take notes and use them in the summary automatically with timestamping
 - [x] Integration with other LLM APIs
 - [x] Different summarisation styles (casual, meeting, standup, dictation)
+- [x] SQLite database with full-text search
+- [x] Tagging system for organization
+- [x] Multiple prompt types for different use cases
+- [ ] Database backup and restore functionality
+- [ ] Advanced search and filtering capabilities
+- [ ] Export functionality (PDF, DOCX, etc.)
+- [ ] Cloud storage integration
 
 ## License
 

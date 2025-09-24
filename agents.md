@@ -4,7 +4,7 @@ This document provides comprehensive information for AI agents and developers wo
 
 ## Project Overview
 
-Blackbox is a Windows-only audio capture and transcription tool with a Wails-based GUI interface. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides AI-powered summarisation using both remote APIs (OpenAI) and local AI (llama.cpp).
+Blackbox is a Windows-only audio capture and transcription tool with a Wails-based GUI interface. The system records system audio (WASAPI loopback) and/or microphone input, transcribes audio using whisper.cpp, and provides AI-powered summarisation using both remote APIs (OpenAI) and local AI (llama.cpp). The application features a comprehensive SQLite database for storing recordings, transcripts, and summaries with full metadata tracking, multiple summarization prompt types, and a modern tabbed interface.
 
 ## Architecture
 
@@ -16,7 +16,8 @@ blackbox/
 │   ├── audio/             # Audio capture (WASAPI loopback + mic)
 │   ├── ui/                # GUI backend services
 │   ├── wav/               # WAV file handling
-│   └── execx/             # External process execution
+│   ├── execx/             # External process execution
+│   └── db/                # SQLite database layer
 ├── frontend/               # Static web assets for GUI
 │   ├── dist/              # Built assets (HTML, CSS, JS)
 │   ├── wailsjs/           # Wails-generated bindings
@@ -29,7 +30,13 @@ blackbox/
 │   ├── llm.example.json   # Example LLM configuration
 │   ├── local.json         # Local AI configuration
 │   └── remote.json        # Remote AI configuration
-├── config/                 # GUI settings (auto-created)
+├── config/                 # GUI settings and prompt configurations
+│   ├── ui.json            # Main GUI settings
+│   ├── meeting.json       # Meeting summarization prompt
+│   ├── dictation.json     # Dictation summarization prompt
+│   ├── technical.json     # Technical summarization prompt
+├── migrations/             # Database schema migrations
+├── data/                   # SQLite database files
 ├── package.json            # Project build scripts
 └── out/                    # Output directory
 ```
@@ -40,6 +47,7 @@ blackbox/
 - **Audio**: malgo (WASAPI loopback + capture)
 - **Transcription**: whisper.cpp
 - **AI Summarisation**: OpenAI API + llama.cpp (local)
+- **Database**: SQLite with FTS5 full-text search
 - **Frontend**: Vanilla HTML/CSS/JavaScript with Tailwind CSS
 - **Styling**: Tailwind CSS v3.4.17 + PostCSS + Autoprefixer
 - **Platform**: Windows 11 only
@@ -160,13 +168,45 @@ blackbox/
   - `LlamaContext`: Context window size for local AI
   - `LlamaModel`: Path to Llama model file
   - `LlamaAPIKey`: API key for llama-server authentication
+  - `DatabasePath`: Path to SQLite database file
+
+#### Prompt System
+- **Purpose**: Configurable summarization prompts for different use cases
+- **Storage**: `./config/` directory with JSON prompt files
+- **Available Prompts**:
+  - **Meeting**: Comprehensive meeting summarization with executive summary, themes, decisions, and action items
+  - **Dictation**: Focused summarization for single-speaker dictation and personal notes
+  - **Technical**: Technical documentation summarization with implementation details and decisions
+- **Features**: Dynamic prompt selection, custom prompt support, and prompt validation
 
 #### Recording Modes
 1. **Loopback Only**: System audio capture
 2. **Loopback + Mic**: System audio mixed with microphone
 3. **Dictation Mode**: Microphone only (useful when no system audio)
 
-### 6. Frontend (`frontend/`)
+### 6. Database System (`internal/db/`)
+
+#### SQLite Database
+- **Purpose**: Comprehensive storage for recordings, transcripts, and summaries
+- **Schema**: Full metadata tracking with relationships and constraints
+- **Features**: FTS5 full-text search, indexing, and views for common queries
+
+#### Key Tables
+- **recordings**: Audio file metadata with technical specs and user notes
+- **transcripts**: Transcription data linked to recordings with confidence scores
+- **summaries**: AI-generated summaries with prompt and model tracking
+- **processing_metadata**: Processing history and performance metrics
+- **tags**: Flexible organization system for recordings
+- **transcript_search**: FTS5 virtual table for full-text search
+
+#### Database Features
+- **Full-Text Search**: Search transcripts using SQLite FTS5
+- **Metadata Tracking**: Complete processing history and performance metrics
+- **Tagging System**: Flexible organization with color-coded tags
+- **Views**: Pre-built views for common queries and reporting
+- **Constraints**: Data integrity with proper foreign keys and checks
+
+### 7. Frontend (`frontend/`)
 
 #### Structure
 - **Assets**: Embedded via Go embed in `frontend/assets.go`
@@ -209,6 +249,22 @@ PickModelFile() (string, error)                        // Returns selected model
 Transcribe(wavPath string) (string, error)             // Returns TXT path
 Summarise(txtPath string) (string, error)              // Returns summary message
 
+// Database Operations
+GetRecordings() ([]Recording, error)                   // Returns all recordings
+GetRecording(id int) (Recording, error)                // Returns specific recording
+UpdateRecording(id int, updates map[string]interface{}) error
+DeleteRecording(id int) error
+SearchTranscripts(query string) ([]Transcript, error)  // Full-text search
+GetTags() ([]Tag, error)                               // Returns all tags
+CreateTag(name, color, description string) (Tag, error)
+UpdateTag(id int, updates map[string]interface{}) error
+DeleteTag(id int) error
+
+// Prompt Management
+GetPrompts() ([]PromptConfig, error)                   // Returns available prompts
+GetPrompt(name string) (PromptConfig, error)           // Returns specific prompt
+SetSelectedPrompt(name string) error                   // Sets active prompt
+
 // Settings
 GetSettings() UISettings                               // Returns current config
 SaveSettings(jsonStr string) (UISettings, error)      // Saves and returns config
@@ -242,7 +298,37 @@ wruntime.EventsEmit(a.uiCtx, "audioData", map[string]interface{}{
   "llama_temp": 0.1,
   "llama_context": 32000,
   "llama_model": "",
-  "llama_api_key": ""
+  "llama_api_key": "",
+  "database_path": "./data/blackbox.db"
+}
+```
+
+### Prompt Configuration Files
+
+#### Meeting Prompt (`./config/meeting.json`)
+```json
+{
+  "name": "Meeting Transcript",
+  "description": "Comprehensive meeting summarisation with executive summary, themes, decisions, and action items",
+  "prompt": "You are a specialised transcript summariser..."
+}
+```
+
+#### Dictation Prompt (`./config/dictation.json`)
+```json
+{
+  "name": "Dictation Notes",
+  "description": "Focused summarisation for single-speaker dictation and personal notes",
+  "prompt": "You are a specialised dictation summariser..."
+}
+```
+
+#### Technical Prompt (`./config/technical.json`)
+```json
+{
+  "name": "Technical Documentation",
+  "description": "Focused summarisation for technical discussions and documentation",
+  "prompt": "You are a specialised technical documentation summariser..."
 }
 ```
 
@@ -307,6 +393,21 @@ wruntime.EventsEmit(a.uiCtx, "audioData", map[string]interface{}{
 - **Configuration**: Temperature, context window, and API key settings
 - **Fallback**: Graceful fallback to remote AI if local AI fails
 - **Privacy**: Complete local processing without external API calls
+
+### 8. Database Development
+- **Schema Management**: Use migrations for schema changes
+- **Query Optimization**: Leverage indexes and views for performance
+- **Full-Text Search**: Use FTS5 virtual tables for transcript search
+- **Data Integrity**: Use foreign keys and constraints for data consistency
+- **Transaction Management**: Wrap related operations in transactions
+- **Error Handling**: Proper error handling for database operations
+
+### 9. Prompt System Development
+- **Configuration**: Store prompts as JSON files in `./config/`
+- **Validation**: Validate prompt structure and required fields
+- **Dynamic Loading**: Load prompts at runtime for flexibility
+- **User Selection**: Allow users to select and switch between prompts
+- **Custom Prompts**: Support for user-defined custom prompts
 
 ## Build and Deployment
 
@@ -406,6 +507,20 @@ cd frontend && npm run tailwind:build
 4. **Testing**: Use local AI checkbox in Summarise or RT tabs
 5. **Performance**: Adjust context window based on available RAM
 
+### Database Management
+1. **Schema Updates**: Create new migration files in `./migrations/`
+2. **Data Queries**: Use the provided views for common queries
+3. **Full-Text Search**: Implement search using the transcript_search virtual table
+4. **Tagging**: Use the tagging system for recording organization
+5. **Performance**: Monitor query performance and add indexes as needed
+
+### Prompt Customization
+1. **Create New Prompt**: Add new JSON file to `./config/` directory
+2. **Validate Structure**: Ensure name, description, and prompt fields are present
+3. **Test Prompt**: Use the prompt in the GUI to verify functionality
+4. **Update UI**: Add prompt selection to frontend if needed
+5. **Documentation**: Update prompt documentation and examples
+
 ## Troubleshooting
 
 ### Common Issues
@@ -417,6 +532,9 @@ cd frontend && npm run tailwind:build
 6. **Styling Missing in Production**: Ensure CSS is built before Wails build
 7. **Local AI Not Working**: Check llama-server binary and model file paths
 8. **Summarisation Fails**: Verify API keys and network connectivity
+9. **Database Errors**: Check database file permissions and schema migrations
+10. **Search Not Working**: Verify FTS5 extension is available in SQLite
+11. **Prompt Loading Fails**: Check prompt JSON file syntax and structure
 
 ### Debug Steps
 1. Check console output for error messages
@@ -434,6 +552,15 @@ cd frontend && npm run tailwind:build
    - Check model file path in settings
    - Ensure sufficient RAM for model loading
    - Test llama-server manually: `./llamacpp-bin/llama-server.exe --help`
+7. **Database Issues**:
+   - Check database file exists and is writable
+   - Verify schema migrations have been applied
+   - Test database connection and queries
+   - Check FTS5 extension availability
+8. **Prompt Issues**:
+   - Verify prompt JSON files are valid
+   - Check prompt file paths and permissions
+   - Test prompt loading and validation
 
 ## Future Enhancements
 
@@ -446,6 +573,12 @@ cd frontend && npm run tailwind:build
 - Batch processing capabilities
 - Model management and automatic updates
 - Advanced prompt customization
+- Database backup and restore functionality
+- Advanced search and filtering capabilities
+- Recording analytics and statistics
+- Export functionality (PDF, DOCX, etc.)
+- Cloud storage integration
+- Multi-user support with user management
 
 ### Current UI Features
 - **Modern Dark Theme**: Professional appearance with proper contrast
@@ -454,6 +587,12 @@ cd frontend && npm run tailwind:build
 - **Accessibility**: Proper focus indicators and disabled states
 - **Tabbed Interface**: Clean navigation between different functionality
 - **Real-Time Spectrum Analyser**: Live audio visualisation with 60fps animation
+- **Database Integration**: Full CRUD operations for recordings and metadata
+- **Search Functionality**: Full-text search across transcripts
+- **Tagging System**: Color-coded organization and filtering
+- **Prompt Selection**: Dynamic prompt switching for different use cases
+- **Audio Playback**: Secure in-GUI audio players with data URLs
+- **Markdown Rendering**: Beautiful formatted output for transcripts and summaries
 
 ### Extension Points
 - Audio source plugins
@@ -465,5 +604,11 @@ cd frontend && npm run tailwind:build
 - AI provider plugins
 - Custom prompt templates
 - Export formats (PDF, DOCX, etc.)
+- Database schema extensions
+- Custom search algorithms
+- Advanced tagging systems
+- Plugin architecture for custom features
+- API endpoints for external integrations
+- Custom summarization engines
 
 This documentation should provide AI agents with comprehensive understanding of the Blackbox project structure, enabling effective code analysis, modification, and extension.

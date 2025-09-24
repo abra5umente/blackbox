@@ -18,8 +18,6 @@ export function GetAudioDataURL(arg1:string):Promise<string>;
 
 export function GetAvailablePrompts():Promise<Array<ui.PromptConfig>>;
 
-export function GetImportProgress():Promise<Record<string, any>>;
-
 export function GetPromptConfig(arg1:string):Promise<ui.PromptConfig>;
 
 export function GetRecordingByID(arg1:number):Promise<db.Recording>;
@@ -39,8 +37,6 @@ export function GetTranscriptContent(arg1:number):Promise<string>;
 export function GetTranscriptsByRecordingID(arg1:number):Promise<Array<db.Transcript>>;
 
 export function GetWavPathForRecording(arg1:number):Promise<string>;
-
-export function ImportData(arg1:string,arg2:boolean,arg3:boolean):Promise<Record<string, any>>;
 
 export function IsRecording():Promise<boolean>;
 
@@ -75,5 +71,3 @@ export function StopRecording():Promise<string>;
 export function Summarise(arg1:string):Promise<string>;
 
 export function Transcribe(arg1:string):Promise<string>;
-
-export function ValidateImportDirectory(arg1:string):Promise<Record<string, any>>;
