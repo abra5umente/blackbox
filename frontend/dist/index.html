@@ -360,6 +360,37 @@
       </div>
 
       <div class="my-6 border-t border-gray-700 pt-4">
+        <h3 class="text-lg font-semibold text-white mb-3">Remote AI Settings</h3>
+        <div class="text-gray-400 text-sm mb-3">Configure the hosted LLM endpoint used for summarisation. Defaults target the latest <span class="text-blue-300">gpt-5-mini</span> deployment.</div>
+
+        <div class="my-3">
+          <label class="block mb-2 text-gray-300">Base URL</label>
+          <input type="text" id="remoteBaseURL" placeholder="https://api.openai.com/v1" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-96 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+        </div>
+
+        <div class="my-3">
+          <label class="block mb-2 text-gray-300">Model</label>
+          <input type="text" id="remoteModel" placeholder="gpt-5-mini" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+        </div>
+
+        <div class="my-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block mb-2 text-gray-300">Temperature</label>
+            <input type="number" id="remoteTemperature" min="0" max="2" step="0.1" placeholder="0.2" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          </div>
+          <div>
+            <label class="block mb-2 text-gray-300">Max Completion Tokens</label>
+            <input type="number" id="remoteMaxTokens" min="256" max="8192" step="64" placeholder="2048" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          </div>
+        </div>
+
+        <div class="my-3">
+          <label class="block mb-2 text-gray-300">API Key</label>
+          <input type="password" id="remoteAPIKey" placeholder="Remote provider API key" class="bg-gray-700 text-gray-200 border border-gray-600 rounded-md px-3 py-2 w-96 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+        </div>
+      </div>
+
+      <div class="my-6 border-t border-gray-700 pt-4">
         <h3 class="text-lg font-semibold text-white mb-3">Local AI Settings</h3>
         <div class="text-gray-400 text-sm mb-3">Configure local AI parameters. Use the checkboxes in the Summarise and Record & Transcribe & Summarise tabs to enable local AI.</div>
         
@@ -525,6 +556,49 @@
       };
 
       // Settings
+      const loadRemoteConfig = async () => {
+        if (!App()) return;
+        try {
+          const cfg = await App().GetRemoteConfig();
+          const baseURL = cfg?.base_url ?? cfg?.BaseURL ?? defaultRemoteConfig.base_url;
+          const model = cfg?.model ?? cfg?.Model ?? defaultRemoteConfig.model;
+          const temperature = cfg?.temperature ?? cfg?.Temperature ?? defaultRemoteConfig.temperature;
+          const maxTokens = cfg?.max_tokens ?? cfg?.MaxTokens ?? defaultRemoteConfig.max_tokens;
+          const apiKey = cfg?.api_key ?? cfg?.APIKey ?? '';
+
+          document.getElementById('remoteBaseURL').value = baseURL;
+          document.getElementById('remoteModel').value = model;
+          document.getElementById('remoteTemperature').value = temperature;
+          document.getElementById('remoteMaxTokens').value = maxTokens;
+          document.getElementById('remoteAPIKey').value = apiKey;
+        } catch (e) {
+          console.error('Failed to load remote config:', e);
+        }
+      };
+
+      const saveRemoteConfig = async () => {
+        if (!App()) return null;
+
+        const temperatureInput = document.getElementById('remoteTemperature').value;
+        const maxTokensInput = document.getElementById('remoteMaxTokens').value;
+
+        const parsedTemp = Number(temperatureInput);
+        const temperature = Number.isFinite(parsedTemp) ? parsedTemp : defaultRemoteConfig.temperature;
+
+        const parsedTokens = parseInt(maxTokensInput, 10);
+        const maxTokens = Number.isFinite(parsedTokens) && parsedTokens > 0 ? parsedTokens : defaultRemoteConfig.max_tokens;
+
+        const payload = {
+          base_url: document.getElementById('remoteBaseURL').value.trim() || defaultRemoteConfig.base_url,
+          api_key: document.getElementById('remoteAPIKey').value,
+          model: document.getElementById('remoteModel').value.trim() || defaultRemoteConfig.model,
+          temperature,
+          max_tokens: maxTokens
+        };
+
+        return App().SaveRemoteConfig(JSON.stringify(payload));
+      };
+
       const loadSettings = async () => {
         try {
           const s = await App().GetSettings();
@@ -543,6 +617,8 @@
           document.getElementById('llamaContext').value = (s && s.llama_context) || '32000';
           document.getElementById('llamaAPIKey').value = (s && s.llama_api_key) || '';
         } catch (e) {}
+
+        await loadRemoteConfig();
       };
 
       const saveSettings = async () => {
@@ -557,7 +633,15 @@
           llama_api_key: document.getElementById('llamaAPIKey').value
         };
         const res = await App().SaveSettings(JSON.stringify(cfg));
-        document.getElementById('settingsInfo').textContent = 'Saved: ' + ((res && (res.out_dir || res.OutDir)) || '');
+        try {
+          const remoteRes = await saveRemoteConfig();
+          const modelName = (remoteRes && (remoteRes.model || remoteRes.Model)) || defaultRemoteConfig.model;
+          const savedOutDir = (res && (res.out_dir || res.OutDir)) || cfg.out_dir || './out';
+          document.getElementById('settingsInfo').textContent = 'Saved settings (' + savedOutDir + '). Remote model: ' + modelName;
+        } catch (error) {
+          console.error('Failed to save remote config:', error);
+          document.getElementById('settingsInfo').textContent = 'Settings saved, but remote AI config failed to save';
+        }
       };
 
       // Real Audio Spectrum Analyser using Backend Audio Data
@@ -780,6 +864,12 @@
       let toolsSelectedDbFile = null;
       let availablePrompts = [];
       let selectedPrompt = 'meeting'; // Default prompt
+      const defaultRemoteConfig = {
+        base_url: 'https://api.openai.com/v1',
+        model: 'gpt-5-mini',
+        temperature: 0.2,
+        max_tokens: 2048
+      };
 
       // Auto Tab Event Handlers
       document.getElementById('btnAutoStart').onclick = async () => {

@@ -50,6 +50,10 @@ export function GetRecordingsWithTranscripts() {
   return window['go']['ui']['App']['GetRecordingsWithTranscripts']();
 }
 
+export function GetRemoteConfig() {
+  return window['go']['ui']['App']['GetRemoteConfig']();
+}
+
 export function GetSelectedPrompt() {
   return window['go']['ui']['App']['GetSelectedPrompt']();
 }
@@ -104,6 +108,10 @@ export function PickWavFromOutDir() {
 
 export function SaveCustomPrompt(arg1) {
   return window['go']['ui']['App']['SaveCustomPrompt'](arg1);
+}
+
+export function SaveRemoteConfig(arg1) {
+  return window['go']['ui']['App']['SaveRemoteConfig'](arg1);
 }
 
 export function SaveSettings(arg1) {

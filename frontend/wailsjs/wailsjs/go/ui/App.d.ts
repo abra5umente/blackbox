@@ -28,6 +28,8 @@ export function GetRecordingsWithDetails(arg1:number,arg2:number):Promise<Array<
 
 export function GetRecordingsWithTranscripts():Promise<Array<db.RecordingWithTranscript>>;
 
+export function GetRemoteConfig():Promise<ui.RemoteLLMConfig>;
+
 export function GetSelectedPrompt():Promise<string>;
 
 export function GetSettings():Promise<ui.UISettings>;
@@ -55,6 +57,8 @@ export function PickTxtFromOutDir():Promise<string>;
 export function PickWavFromOutDir():Promise<string>;
 
 export function SaveCustomPrompt(arg1:ui.PromptConfig):Promise<void>;
+
+export function SaveRemoteConfig(arg1:string):Promise<ui.RemoteLLMConfig>;
 
 export function SaveSettings(arg1:string):Promise<ui.UISettings>;
 

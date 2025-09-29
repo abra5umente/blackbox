@@ -327,6 +327,26 @@ export namespace ui {
 	        this.prompt = source["prompt"];
 	    }
 	}
+	export class RemoteLLMConfig {
+	    base_url: string;
+	    api_key: string;
+	    model: string;
+	    temperature: number;
+	    max_tokens: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RemoteLLMConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.base_url = source["base_url"];
+	        this.api_key = source["api_key"];
+	        this.model = source["model"];
+	        this.temperature = source["temperature"];
+	        this.max_tokens = source["max_tokens"];
+	    }
+	}
 	export class UISettings {
 	    out_dir: string;
 	    database_path: string;

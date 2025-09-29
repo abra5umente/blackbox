@@ -33,6 +33,24 @@ type PromptConfig struct {
 	Prompt      string `json:"prompt"`
 }
 
+// RemoteLLMConfig represents editable remote LLM settings persisted in configs/remote.json
+type RemoteLLMConfig struct {
+	BaseURL     string  `json:"base_url"`
+	APIKey      string  `json:"api_key"`
+	Model       string  `json:"model"`
+	Temperature float64 `json:"temperature"`
+	MaxTokens   int     `json:"max_tokens"`
+}
+
+func defaultRemoteLLMConfig() RemoteLLMConfig {
+	return RemoteLLMConfig{
+		BaseURL:     "https://api.openai.com/v1",
+		Model:       "gpt-5-mini",
+		Temperature: 0.2,
+		MaxTokens:   2048,
+	}
+}
+
 // App exposes methods to the Wails frontend.
 type App struct {
 	settings *SettingsStore
@@ -148,6 +166,81 @@ func (a *App) SaveSettings(jsonStr string) (UISettings, error) {
 		return UISettings{}, err
 	}
 	return a.settings.Get(), nil
+}
+
+// GetRemoteConfig reads the current remote LLM configuration (or defaults if missing).
+func (a *App) GetRemoteConfig() (RemoteLLMConfig, error) {
+	cfg := defaultRemoteLLMConfig()
+
+	b, err := os.ReadFile("./configs/remote.json")
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return cfg, nil
+		}
+		return RemoteLLMConfig{}, err
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return RemoteLLMConfig{}, err
+	}
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		return RemoteLLMConfig{}, err
+	}
+
+	if strings.TrimSpace(cfg.BaseURL) == "" {
+		cfg.BaseURL = defaultRemoteLLMConfig().BaseURL
+	}
+	if strings.TrimSpace(cfg.Model) == "" {
+		cfg.Model = defaultRemoteLLMConfig().Model
+	}
+	if cfg.MaxTokens <= 0 {
+		cfg.MaxTokens = defaultRemoteLLMConfig().MaxTokens
+	}
+	if _, ok := raw["temperature"]; !ok {
+		cfg.Temperature = defaultRemoteLLMConfig().Temperature
+	}
+
+	return cfg, nil
+}
+
+// SaveRemoteConfig persists the supplied remote LLM configuration to configs/remote.json.
+func (a *App) SaveRemoteConfig(jsonStr string) (RemoteLLMConfig, error) {
+	var cfg RemoteLLMConfig
+	if err := json.Unmarshal([]byte(jsonStr), &cfg); err != nil {
+		return RemoteLLMConfig{}, err
+	}
+
+	defaults := defaultRemoteLLMConfig()
+	if strings.TrimSpace(cfg.BaseURL) == "" {
+		cfg.BaseURL = defaults.BaseURL
+	}
+	if strings.TrimSpace(cfg.Model) == "" {
+		cfg.Model = defaults.Model
+	}
+	if cfg.MaxTokens <= 0 {
+		cfg.MaxTokens = defaults.MaxTokens
+	}
+	if cfg.Temperature < 0 {
+		cfg.Temperature = 0
+	}
+	if cfg.Temperature > 2 {
+		cfg.Temperature = 2
+	}
+
+	if err := os.MkdirAll("./configs", 0755); err != nil {
+		return RemoteLLMConfig{}, err
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return RemoteLLMConfig{}, err
+	}
+	if err := os.WriteFile("./configs/remote.json", data, 0644); err != nil {
+		return RemoteLLMConfig{}, err
+	}
+
+	return cfg, nil
 }
 
 // --- Prompt Management API ---
@@ -628,6 +721,18 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		}
 
 		// Prepare the chat request
+		maxTokens := cfg.MaxTokens
+		if maxTokens <= 0 {
+			maxTokens = defaultRemoteLLMConfig().MaxTokens
+		}
+		temperature := cfg.Temperature
+		if temperature < 0 {
+			temperature = 0
+		}
+		if temperature > 2 {
+			temperature = 2
+		}
+
 		request := chatRequest{
 			Model: cfg.Model,
 			Messages: []chatMessage{
@@ -640,7 +745,8 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 					Content: string(transcript),
 				},
 			},
-			MaxTokens: 2000,
+			MaxTokens:   maxTokens,
+			Temperature: temperature,
 		}
 
 		// Make the API request
@@ -795,9 +901,11 @@ func (a *App) summariseWithLocalAI(transcript, prompt string) (string, error) {
 
 // Helper: load LLM config shared with CLI semantics
 type llmConfig struct {
-	BaseURL string `json:"base_url"`
-	APIKey  string `json:"api_key"`
-	Model   string `json:"model"`
+	BaseURL     string  `json:"base_url"`
+	APIKey      string  `json:"api_key"`
+	Model       string  `json:"model"`
+	Temperature float64 `json:"temperature,omitempty"`
+	MaxTokens   int     `json:"max_tokens,omitempty"`
 }
 
 // Chat API types
@@ -888,6 +996,9 @@ func (a *App) loadLLMConfig(path string) (*llmConfig, error) {
 	var cfg llmConfig
 	if err := json.Unmarshal(b, &cfg); err != nil {
 		return nil, err
+	}
+	if cfg.MaxTokens <= 0 {
+		cfg.MaxTokens = defaultRemoteLLMConfig().MaxTokens
 	}
 	if cfg.BaseURL == "" || cfg.Model == "" || cfg.APIKey == "" {
 		return nil, fmt.Errorf("missing required fields in config")
