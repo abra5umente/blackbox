@@ -147,7 +147,7 @@ blackbox/
   - `StartRecordingAdvanced(withMic, dictation bool)`: Advanced recording modes
   - `StopRecording()`: End capture and finalize WAV
   - `Transcribe(wavPath)`: Run whisper on WAV file
-  - `Summarise(txtPath)`: Process transcript with AI-powered summarisation
+  - `Summarise(txtPath string)`: Process transcript with AI-powered summarisation (supports file paths, recording IDs, or direct transcript references prefixed with `"transcript:"`)
   - `PickWavFromOutDir()`: File picker for WAV files
   - `PickTxtFromOutDir()`: File picker for TXT files
   - `PickModelFile()`: File picker for Llama model files
@@ -218,7 +218,7 @@ blackbox/
 1. **Record**: Audio capture with mic/dictation options + real-time spectrum analyser
 2. **Transcribe**: WAV file selection and transcription
 3. **Record & Transcribe & Summarise**: Combined workflow with live audio feedback + AI summarisation
-4. **Summarise**: TXT file selection and AI processing (remote or local)
+4. **Summarise**: TXT file selection, AI processing (remote or local), or re-summarisation of database transcripts
 5. **Settings**: Configuration management including local AI settings
 
 #### Tailwind CSS Integration
@@ -247,7 +247,7 @@ PickModelFile() (string, error)                        // Returns selected model
 
 // Processing
 Transcribe(wavPath string) (string, error)             // Returns TXT path
-Summarise(txtPath string) (string, error)              // Returns summary message
+Summarise(txtPath string) (string, error)              // Returns summary message; accepts file paths, recording IDs, or `"transcript:<id>"`
 
 // Database Operations
 GetRecordings() ([]Recording, error)                   // Returns all recordings
@@ -610,6 +610,11 @@ cd frontend && npm run tailwind:build
 - Plugin architecture for custom features
 - API endpoints for external integrations
 - Custom summarization engines
+
+### Summarisation Workflow Updates
+- **Backend**: `Summarise` now detects the `"transcript:<id>"` prefix, allowing direct database lookups without creating temporary TXT files. `SummariseTranscript` accepts an integer transcript ID and delegates to `Summarise` with the new prefix format.
+- **Frontend**: The Summarise tab stores only the transcript ID for selected database entries and calls `SummariseTranscript(transcriptId)`, avoiding redundant transcript content copies in the UI state.
+  - When re-summarising, summaries are written using the originating recording filename when file backups are enabled.
 
 ### Git commit after finishing anything
 

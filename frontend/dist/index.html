@@ -954,8 +954,7 @@
             html += `
               <div class="p-3 border-b border-gray-700 hover:bg-gray-800 cursor-pointer db-file-item" 
                    data-recording-id="${recording.id}" 
-                   data-transcript-id="${recording.transcript_id}"
-                   data-content="${recording.transcript_content.replace(/"/g, '&quot;')}">
+                   data-transcript-id="${recording.transcript_id}">
                 <div class="text-white text-sm font-medium">${displayName}</div>
                 <div class="text-gray-400 text-xs mt-1">
                   ${recordedAt} | ${duration} | ${recording.transcript_model} | ${confidence}
@@ -983,7 +982,6 @@
               toolsSelectedDbFile = {
                 recordingId: parseInt(item.dataset.recordingId),
                 transcriptId: parseInt(item.dataset.transcriptId),
-                content: item.dataset.content,
                 displayName: item.querySelector('.text-white').textContent
               };
               
@@ -1016,7 +1014,7 @@
           }
           
           // Use the new SummariseTranscript method
-          const msg = await App().SummariseTranscript(toolsSelectedDbFile.content);
+          const msg = await App().SummariseTranscript(toolsSelectedDbFile.transcriptId);
           document.getElementById('toolsSummariseLog').textContent = `Summary generated for: ${toolsSelectedDbFile.displayName}`;
 
           // Render formatted output (only the summary content, not system messages)

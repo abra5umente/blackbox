@@ -544,12 +544,13 @@ func (db *DB) GetRecordingsWithTranscripts() ([]*RecordingWithTranscript, error)
 		var recordedAt, transcriptCreatedAt sql.NullTime
 		var displayName, notes, tags sql.NullString
 		var durationSeconds sql.NullFloat64
+		var confidenceScore sql.NullFloat64
 
 		err := rows.Scan(
 			&rec.ID, &rec.Filename, &displayName, &rec.FilePath, &durationSeconds,
 			&recordedAt, &notes, &tags,
 			&rec.TranscriptID, &rec.TranscriptContent, &rec.TranscriptModel,
-			&rec.ConfidenceScore, &transcriptCreatedAt,
+			&confidenceScore, &transcriptCreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan recording with transcript: %w", err)
@@ -560,7 +561,18 @@ func (db *DB) GetRecordingsWithTranscripts() ([]*RecordingWithTranscript, error)
 		rec.RecordedAt = recordedAt.Time
 		rec.Notes = notes.String
 		rec.Tags = tags.String
-		rec.TranscriptCreatedAt = transcriptCreatedAt.Time
+
+		if confidenceScore.Valid {
+			rec.ConfidenceScore = confidenceScore.Float64
+		} else {
+			rec.ConfidenceScore = 0
+		}
+
+		if transcriptCreatedAt.Valid {
+			rec.TranscriptCreatedAt = transcriptCreatedAt.Time
+		} else {
+			rec.TranscriptCreatedAt = time.Time{}
+		}
 
 		recordings = append(recordings, &rec)
 	}

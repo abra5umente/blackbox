@@ -74,7 +74,7 @@ export function StopRecording():Promise<string>;
 
 export function Summarise(arg1:string):Promise<string>;
 
-export function SummariseTranscript(arg1:string):Promise<string>;
+export function SummariseTranscript(arg1:number):Promise<string>;
 
 export function Transcribe(arg1:string):Promise<string>;
 

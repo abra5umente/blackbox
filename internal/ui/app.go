@@ -526,39 +526,73 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 
 	uiCfg := a.settings.Get()
 
-	var transcript string
-	var err error
+	var (
+		transcript         string
+		dbRecording        *db.Recording
+		dbTranscript       *db.Transcript
+		sourceIsFile       bool
+		sourceIsTranscript bool
+	)
 
-	var dbRecording *db.Recording
+	// Special handling for transcript IDs passed via SummariseTranscript
+	if strings.HasPrefix(txtPathOrID, "transcript:") {
+		if a.database == nil {
+			return "", errors.New("database not initialized")
+		}
 
-	// Check if it's a file path (for backwards compatibility)
-	if _, err := os.Stat(txtPathOrID); err == nil {
+		transcriptIDStr := strings.TrimPrefix(txtPathOrID, "transcript:")
+		transcriptID, err := strconv.Atoi(transcriptIDStr)
+		if err != nil {
+			return "", fmt.Errorf("invalid transcript ID: %w", err)
+		}
+
+		var dbErr error
+		dbTranscript, dbErr = a.database.GetTranscript(transcriptID)
+		if dbErr != nil {
+			return "", fmt.Errorf("failed to get transcript from database: %v", dbErr)
+		}
+		transcript = dbTranscript.Content
+
+		dbRecording, dbErr = a.database.GetRecording(dbTranscript.RecordingID)
+		if dbErr != nil {
+			return "", fmt.Errorf("failed to get recording from database: %v", dbErr)
+		}
+
+		sourceIsTranscript = true
+	} else if _, err := os.Stat(txtPathOrID); err == nil {
 		// It's a file path, read from file
 		transcriptBytes, err := os.ReadFile(txtPathOrID)
 		if err != nil {
 			return "", fmt.Errorf("failed to read transcript: %w", err)
 		}
 		transcript = string(transcriptBytes)
+		sourceIsFile = true
 	} else {
 		// Try to parse as recording ID
 		var recordingID int
 		if _, parseErr := fmt.Sscanf(txtPathOrID, "%d", &recordingID); parseErr == nil {
-			// It's a recording ID, get transcript from database
+			if a.database == nil {
+				return "", errors.New("database not initialized")
+			}
+
 			var dbErr error
 			dbRecording, dbErr = a.database.GetRecording(recordingID)
 			if dbErr != nil {
 				return "", fmt.Errorf("failed to get recording from database: %v", dbErr)
 			}
 
-			// Get the transcript for this recording
-			dbTranscript, transErr := a.database.GetTranscriptByRecordingID(dbRecording.ID)
-			if transErr != nil {
-				return "", fmt.Errorf("failed to get transcript from database: %v", transErr)
+			dbTranscript, dbErr = a.database.GetTranscriptByRecordingID(dbRecording.ID)
+			if dbErr != nil {
+				return "", fmt.Errorf("failed to get transcript from database: %v", dbErr)
 			}
 			transcript = dbTranscript.Content
 		} else {
 			return "", fmt.Errorf("invalid file path or recording ID: %s", txtPathOrID)
 		}
+	}
+
+	if strings.TrimSpace(transcript) == "" {
+		return "", errors.New("transcript content is empty")
 	}
 
 	// Get the selected prompt configuration
@@ -618,6 +652,9 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 
 	// If we have a file path, we need to find the recording by filename
 	if dbRecording == nil {
+		if a.database == nil {
+			return "", errors.New("database not initialized")
+		}
 		// It's a file path, find the recording
 		txtFilename := filepath.Base(txtPathOrID)
 		wavFilename := strings.TrimSuffix(txtFilename, ".txt") + ".wav"
@@ -628,10 +665,13 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		}
 	}
 
-	// Get transcript
-	dbTranscript, err := a.database.GetTranscriptByRecordingID(dbRecording.ID)
-	if err != nil {
-		return "", fmt.Errorf("failed to find transcript in database: %w", err)
+	// Ensure we have transcript metadata
+	if dbTranscript == nil {
+		var err error
+		dbTranscript, err = a.database.GetTranscriptByRecordingID(dbRecording.ID)
+		if err != nil {
+			return "", fmt.Errorf("failed to find transcript in database: %w", err)
+		}
 	}
 
 	// Determine model used and endpoint
@@ -673,14 +713,19 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 	// Write summary to output file if file backups are enabled
 	var outputPath string
 	if uiCfg.EnableFileBackups {
-		// Determine output path based on whether input was file or ID
-		if _, err := os.Stat(txtPathOrID); err == nil {
-			// It was a file path
+		cfg := a.settings.Get()
+		outDir := cfg.OutDir
+		if strings.TrimSpace(outDir) == "" {
+			outDir = "./out"
+		}
+
+		if sourceIsFile {
 			outputPath = strings.TrimSuffix(txtPathOrID, filepath.Ext(txtPathOrID)) + "_summary.txt"
+		} else if sourceIsTranscript && dbRecording != nil {
+			baseName := strings.TrimSuffix(dbRecording.Filename, filepath.Ext(dbRecording.Filename))
+			outputPath = filepath.Join(outDir, fmt.Sprintf("%s_summary.txt", baseName))
 		} else {
-			// It was a recording ID, create output in default directory
-			cfg := a.settings.Get()
-			outputPath = filepath.Join(cfg.OutDir, fmt.Sprintf("%s_summary.txt", txtPathOrID))
+			outputPath = filepath.Join(outDir, fmt.Sprintf("%s_summary.txt", txtPathOrID))
 		}
 
 		if err := os.WriteFile(outputPath, []byte(summary), 0644); err != nil {
@@ -689,6 +734,18 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 	}
 
 	return fmt.Sprintf("Summary saved to database (ID: %d)\n\n--- Summary ---\n%s", dbSummary.ID, summary), nil
+}
+
+// SummariseTranscript summarises a transcript selected from the database by ID
+func (a *App) SummariseTranscript(transcriptID int) (string, error) {
+	if a.database == nil {
+		return "", errors.New("database not initialized")
+	}
+	if transcriptID <= 0 {
+		return "", fmt.Errorf("invalid transcript ID: %d", transcriptID)
+	}
+
+	return a.Summarise(fmt.Sprintf("transcript:%d", transcriptID))
 }
 
 // summariseWithLocalAI uses the local llama-server for summarisation
@@ -1401,32 +1458,6 @@ func (a *App) GetRecordingsWithTranscripts() ([]*db.RecordingWithTranscript, err
 	}
 
 	return a.database.GetRecordingsWithTranscripts()
-}
-
-// SummariseTranscript summarises a transcript directly from content without needing a file
-func (a *App) SummariseTranscript(transcriptContent string) (string, error) {
-	// Get current settings to access output directory
-	settings := a.settings.Get()
-
-	// Create a temporary file for the summarise method
-	tempFile := filepath.Join(settings.OutDir, fmt.Sprintf("temp_transcript_%d.txt", time.Now().UnixNano()))
-
-	// Write transcript content to temporary file
-	err := os.WriteFile(tempFile, []byte(transcriptContent), 0644)
-	if err != nil {
-		return "", fmt.Errorf("failed to create temporary file: %w", err)
-	}
-
-	// Clean up temporary file after summarisation
-	defer func() {
-		if removeErr := os.Remove(tempFile); removeErr != nil {
-			// Log error but don't fail the operation
-			fmt.Printf("Warning: failed to remove temporary file %s: %v\n", tempFile, removeErr)
-		}
-	}()
-
-	// Use existing summarise method
-	return a.Summarise(tempFile)
 }
 
 // PickDatabaseFile opens a file picker for selecting a database file
