@@ -46,6 +46,10 @@ export function GetRecordingsWithDetails(arg1, arg2) {
   return window['go']['ui']['App']['GetRecordingsWithDetails'](arg1, arg2);
 }
 
+export function GetRecordingsWithTranscripts() {
+  return window['go']['ui']['App']['GetRecordingsWithTranscripts']();
+}
+
 export function GetSelectedPrompt() {
   return window['go']['ui']['App']['GetSelectedPrompt']();
 }
@@ -126,6 +130,10 @@ export function StartRecordingAdvanced(arg1, arg2) {
   return window['go']['ui']['App']['StartRecordingAdvanced'](arg1, arg2);
 }
 
+export function StartRecordingTools(arg1, arg2) {
+  return window['go']['ui']['App']['StartRecordingTools'](arg1, arg2);
+}
+
 export function StopRecording() {
   return window['go']['ui']['App']['StopRecording']();
 }
@@ -134,6 +142,18 @@ export function Summarise(arg1) {
   return window['go']['ui']['App']['Summarise'](arg1);
 }
 
+export function SummariseTranscript(arg1) {
+  return window['go']['ui']['App']['SummariseTranscript'](arg1);
+}
+
 export function Transcribe(arg1) {
   return window['go']['ui']['App']['Transcribe'](arg1);
+}
+
+export function UpdateRecording(arg1, arg2) {
+  return window['go']['ui']['App']['UpdateRecording'](arg1, arg2);
+}
+
+export function UpdateSummary(arg1, arg2) {
+  return window['go']['ui']['App']['UpdateSummary'](arg1, arg2);
 }

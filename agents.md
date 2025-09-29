@@ -611,4 +611,5 @@ cd frontend && npm run tailwind:build
 - API endpoints for external integrations
 - Custom summarization engines
 
-This documentation should provide AI agents with comprehensive understanding of the Blackbox project structure, enabling effective code analysis, modification, and extension.
+### Git commit after finishing anything
+

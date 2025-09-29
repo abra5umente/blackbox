@@ -26,6 +26,8 @@ export function GetRecordingFilePath(arg1:number):Promise<string>;
 
 export function GetRecordingsWithDetails(arg1:number,arg2:number):Promise<Array<db.RecordingWithDetails>>;
 
+export function GetRecordingsWithTranscripts():Promise<Array<db.RecordingWithTranscript>>;
+
 export function GetSelectedPrompt():Promise<string>;
 
 export function GetSettings():Promise<ui.UISettings>;
@@ -66,8 +68,16 @@ export function StartRecording(arg1:boolean):Promise<string>;
 
 export function StartRecordingAdvanced(arg1:boolean,arg2:boolean):Promise<string>;
 
+export function StartRecordingTools(arg1:boolean,arg2:boolean):Promise<string>;
+
 export function StopRecording():Promise<string>;
 
 export function Summarise(arg1:string):Promise<string>;
 
+export function SummariseTranscript(arg1:string):Promise<string>;
+
 export function Transcribe(arg1:string):Promise<string>;
+
+export function UpdateRecording(arg1:number,arg2:Record<string, any>):Promise<void>;
+
+export function UpdateSummary(arg1:number,arg2:Record<string, any>):Promise<void>;

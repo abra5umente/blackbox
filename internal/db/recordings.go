@@ -160,7 +160,7 @@ func (db *DB) ListRecordings(limit, offset int, mode, tag *string) ([]*Recording
 		args = append(args, "%"+*tag+"%")
 	}
 
-	query += " ORDER BY created_at DESC"
+	query += " ORDER BY id DESC"
 
 	if limit > 0 {
 		query += " LIMIT ?"
@@ -228,7 +228,9 @@ func (db *DB) UpdateRecording(recording *Recording) error {
 	query := `
 		UPDATE recordings SET
 			display_name = ?, file_size = ?, duration_seconds = ?,
-			recorded_at = ?, notes = ?, tags = ?, audio_data = ?
+			recorded_at = ?, notes = ?, tags = ?, audio_data = ?,
+			recording_mode = ?, with_microphone = ?, sample_rate = ?,
+			channels = ?, bits_per_sample = ?, audio_format = ?
 		WHERE id = ?`
 
 	result, err := db.Exec(query,
@@ -239,6 +241,12 @@ func (db *DB) UpdateRecording(recording *Recording) error {
 		nullString(recording.Notes),
 		nullString(recording.Tags),
 		recording.AudioData,
+		recording.RecordingMode,
+		recording.WithMicrophone,
+		recording.SampleRate,
+		recording.Channels,
+		recording.BitsPerSample,
+		recording.AudioFormat,
 		recording.ID,
 	)
 	if err != nil {
@@ -433,7 +441,7 @@ func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithD
 		FROM recordings r
 		LEFT JOIN transcripts t ON r.id = t.recording_id
 		LEFT JOIN summaries s ON t.id = s.transcript_id
-		ORDER BY r.created_at DESC
+		ORDER BY r.id DESC
 		LIMIT ? OFFSET ?`
 
 	rows, err := db.Query(query, limit, offset)
@@ -507,6 +515,58 @@ func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithD
 		}
 
 		recordings = append(recordings, &recording)
+	}
+
+	return recordings, nil
+}
+
+// GetRecordingsWithTranscripts returns recordings that have transcripts available for summarisation
+func (db *DB) GetRecordingsWithTranscripts() ([]*RecordingWithTranscript, error) {
+	query := `
+		SELECT 
+			r.id, r.filename, r.display_name, r.file_path, r.duration_seconds,
+			r.recorded_at, r.notes, r.tags,
+			t.id as transcript_id, t.content as transcript_content, t.model_used as transcript_model,
+			t.confidence_score, t.created_at as transcript_created_at
+		FROM recordings r
+		INNER JOIN transcripts t ON r.id = t.recording_id
+		ORDER BY r.recorded_at DESC, t.created_at DESC`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recordings with transcripts: %w", err)
+	}
+	defer rows.Close()
+
+	var recordings []*RecordingWithTranscript
+	for rows.Next() {
+		var rec RecordingWithTranscript
+		var recordedAt, transcriptCreatedAt sql.NullTime
+		var displayName, notes, tags sql.NullString
+		var durationSeconds sql.NullFloat64
+
+		err := rows.Scan(
+			&rec.ID, &rec.Filename, &displayName, &rec.FilePath, &durationSeconds,
+			&recordedAt, &notes, &tags,
+			&rec.TranscriptID, &rec.TranscriptContent, &rec.TranscriptModel,
+			&rec.ConfidenceScore, &transcriptCreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan recording with transcript: %w", err)
+		}
+
+		rec.DisplayName = displayName.String
+		rec.DurationSeconds = durationSeconds.Float64
+		rec.RecordedAt = recordedAt.Time
+		rec.Notes = notes.String
+		rec.Tags = tags.String
+		rec.TranscriptCreatedAt = transcriptCreatedAt.Time
+
+		recordings = append(recordings, &rec)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating recordings with transcripts: %w", err)
 	}
 
 	return recordings, nil

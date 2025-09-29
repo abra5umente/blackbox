@@ -478,6 +478,23 @@ type RecordingWithDetails struct {
 	SummarizedAt      *time.Time `json:"summarized_at,omitempty"`
 }
 
+// RecordingWithTranscript represents a recording with its transcript for summarisation
+type RecordingWithTranscript struct {
+	ID                  int       `json:"id"`
+	Filename            string    `json:"filename"`
+	DisplayName         string    `json:"display_name"`
+	FilePath            string    `json:"file_path"`
+	DurationSeconds     float64   `json:"duration_seconds"`
+	RecordedAt          time.Time `json:"recorded_at"`
+	Notes               string    `json:"notes"`
+	Tags                string    `json:"tags"`
+	TranscriptID        int       `json:"transcript_id"`
+	TranscriptContent   string    `json:"transcript_content"`
+	TranscriptModel     string    `json:"transcript_model"`
+	ConfidenceScore     float64   `json:"confidence_score"`
+	TranscriptCreatedAt time.Time `json:"transcript_created_at"`
+}
+
 // SearchResult represents a search result
 type SearchResult struct {
 	RecordingID   int        `json:"recording_id"`

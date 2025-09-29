@@ -198,7 +198,7 @@ func (db *DB) ListSummaries(limit, offset int, transcriptID *int, summaryType *s
 		args = append(args, *model)
 	}
 
-	query += " ORDER BY created_at DESC"
+	query += " ORDER BY id DESC"
 
 	if limit > 0 {
 		query += " LIMIT ?"
@@ -263,7 +263,8 @@ func (db *DB) UpdateSummary(summary *Summary) error {
 	query := `
 		UPDATE summaries SET
 			content = ?, temperature = ?, prompt_used = ?, prompt_id = ?,
-			processing_time_seconds = ?, api_endpoint = ?, local_model_path = ?
+			processing_time_seconds = ?, api_endpoint = ?, local_model_path = ?,
+			model_used = ?, summary_type = ?
 		WHERE id = ?`
 
 	result, err := db.Exec(query,
@@ -274,6 +275,8 @@ func (db *DB) UpdateSummary(summary *Summary) error {
 		nullFloat64(summary.ProcessingTimeSeconds),
 		nullString(summary.APIEndpoint),
 		nullString(summary.LocalModelPath),
+		summary.ModelUsed,
+		summary.SummaryType,
 		summary.ID,
 	)
 	if err != nil {
@@ -319,7 +322,7 @@ func (db *DB) GetSummariesByDateRange(start, end time.Time, limit, offset int) (
 		       api_endpoint, local_model_path, created_at
 		FROM summaries
 		WHERE created_at >= ? AND created_at <= ?
-		ORDER BY created_at DESC
+		ORDER BY id DESC
 		LIMIT ? OFFSET ?`
 
 	rows, err := db.Query(query, start, end, limit, offset)
@@ -410,7 +413,7 @@ func (db *DB) GetSummariesByTranscriptID(transcriptID int) ([]*Summary, error) {
 		       api_endpoint, local_model_path, created_at
 		FROM summaries 
 		WHERE transcript_id = ? 
-		ORDER BY created_at DESC`
+		ORDER BY id DESC`
 
 	rows, err := db.Query(query, transcriptID)
 	if err != nil {

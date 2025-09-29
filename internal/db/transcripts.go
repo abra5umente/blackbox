@@ -165,7 +165,7 @@ func (db *DB) ListTranscripts(limit, offset int, recordingID *int, model *string
 		args = append(args, *model)
 	}
 
-	query += " ORDER BY created_at DESC"
+	query += " ORDER BY id DESC"
 
 	if limit > 0 {
 		query += " LIMIT ?"
@@ -225,7 +225,7 @@ func (db *DB) GetTranscriptsByRecordingID(recordingID int) ([]*Transcript, error
 		       processing_time_seconds, whisper_version, created_at
 		FROM transcripts 
 		WHERE recording_id = ? 
-		ORDER BY created_at DESC`
+		ORDER BY id DESC`
 
 	rows, err := db.Query(query, recordingID)
 	if err != nil {
@@ -268,7 +268,7 @@ func (db *DB) UpdateTranscript(transcript *Transcript) error {
 	query := `
 		UPDATE transcripts SET
 			content = ?, confidence_score = ?, language = ?,
-			processing_time_seconds = ?, whisper_version = ?
+			processing_time_seconds = ?, whisper_version = ?, model_used = ?
 		WHERE id = ?`
 
 	result, err := db.Exec(query,
@@ -277,6 +277,7 @@ func (db *DB) UpdateTranscript(transcript *Transcript) error {
 		transcript.Language,
 		nullFloat64(transcript.ProcessingTimeSeconds),
 		nullString(transcript.WhisperVersion),
+		transcript.ModelUsed,
 		transcript.ID,
 	)
 	if err != nil {
@@ -372,7 +373,7 @@ func (db *DB) GetTranscriptsByDateRange(start, end time.Time, limit, offset int)
 		       language, processing_time_seconds, whisper_version, created_at
 		FROM transcripts
 		WHERE created_at >= ? AND created_at <= ?
-		ORDER BY created_at DESC
+		ORDER BY id DESC
 		LIMIT ? OFFSET ?`
 
 	rows, err := db.Query(query, start, end, limit, offset)

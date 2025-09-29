@@ -150,6 +150,62 @@ export namespace db {
 		    return a;
 		}
 	}
+	export class RecordingWithTranscript {
+	    id: number;
+	    filename: string;
+	    display_name: string;
+	    file_path: string;
+	    duration_seconds: number;
+	    // Go type: time
+	    recorded_at: any;
+	    notes: string;
+	    tags: string;
+	    transcript_id: number;
+	    transcript_content: string;
+	    transcript_model: string;
+	    confidence_score: number;
+	    // Go type: time
+	    transcript_created_at: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecordingWithTranscript(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.filename = source["filename"];
+	        this.display_name = source["display_name"];
+	        this.file_path = source["file_path"];
+	        this.duration_seconds = source["duration_seconds"];
+	        this.recorded_at = this.convertValues(source["recorded_at"], null);
+	        this.notes = source["notes"];
+	        this.tags = source["tags"];
+	        this.transcript_id = source["transcript_id"];
+	        this.transcript_content = source["transcript_content"];
+	        this.transcript_model = source["transcript_model"];
+	        this.confidence_score = source["confidence_score"];
+	        this.transcript_created_at = this.convertValues(source["transcript_created_at"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Summary {
 	    id: number;
 	    transcript_id: number;

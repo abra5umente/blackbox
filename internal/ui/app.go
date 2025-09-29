@@ -271,10 +271,16 @@ func (a *App) IsRecording() bool {
 	return a.recording
 }
 
-// StartRecording starts loopback (and optional mic) capture and writes to a new WAV file under OutDir.
+// StartRecording starts loopback (and optional mic) capture and writes to a new WAV file under OutDir/saved.
+// This is for the Tools tab - files are saved permanently for manual use.
 // Returns the path to the WAV file that will be written.
 func (a *App) StartRecording(withMic bool) (string, error) {
-	return a.StartRecordingAdvanced(withMic, false)
+	return a.startRecordingAdvancedInternal(withMic, false, true)
+}
+
+// StartRecordingTools is specifically for the Tools tab - saves to OutDir/saved permanently.
+func (a *App) StartRecordingTools(withMic bool, dictation bool) (string, error) {
+	return a.startRecordingAdvancedInternal(withMic, dictation, true)
 }
 
 // StopRecording stops capture and finalises the WAV. Returns the WAV path.
@@ -330,33 +336,36 @@ func (a *App) StopRecording() (string, error) {
 		return wavPath, fmt.Errorf("finalize wav: %w", err)
 	}
 
-	// Read the WAV file data
-	audioData, err := os.ReadFile(wavPath)
-	if err != nil {
-		return wavPath, fmt.Errorf("read wav file: %w", err)
+	// Handle database recording update only for Auto mode
+	var recordingID int
+	if a.recordingID > 0 {
+		recordingID = a.recordingID
+		// Read the WAV file data
+		audioData, err := os.ReadFile(wavPath)
+		if err != nil {
+			return wavPath, fmt.Errorf("read wav file: %w", err)
+		}
+
+		// Calculate duration based on file size and audio format
+		// PCM S16LE, 16kHz, mono: 2 bytes per sample, 16000 samples per second
+		durationSeconds := float64(len(audioData)) / (16000.0 * 2.0)
+
+		// Update recording in database with audio data
+		dbRecording, err := a.database.GetRecording(a.recordingID)
+		if err != nil {
+			return wavPath, fmt.Errorf("failed to get recording from database: %w", err)
+		}
+
+		dbRecording.FileSize = int64(len(audioData))
+		dbRecording.DurationSeconds = &durationSeconds
+		dbRecording.AudioData = audioData
+
+		if err := a.database.UpdateRecording(dbRecording); err != nil {
+			return wavPath, fmt.Errorf("failed to update recording in database: %w", err)
+		}
+
+		// Keep the WAV file for potential transcription - it will be cleaned up after successful transcription
 	}
-
-	// Calculate duration based on file size and audio format
-	// PCM S16LE, 16kHz, mono: 2 bytes per sample, 16000 samples per second
-	durationSeconds := float64(len(audioData)) / (16000.0 * 2.0)
-
-	// Update recording in database with audio data
-	dbRecording, err := a.database.GetRecording(a.recordingID)
-	if err != nil {
-		return wavPath, fmt.Errorf("failed to get recording from database: %w", err)
-	}
-
-	dbRecording.FileSize = int64(len(audioData))
-	dbRecording.DurationSeconds = &durationSeconds
-	dbRecording.AudioData = audioData
-
-	if err := a.database.UpdateRecording(dbRecording); err != nil {
-		return wavPath, fmt.Errorf("failed to update recording in database: %w", err)
-	}
-
-	// Don't remove the temporary WAV file yet - keep it for potential transcription
-	// The file will be cleaned up later when no longer needed
-	// We'll keep it in the out directory for now
 
 	// Clear recording ID
 	a.recordingID = 0
@@ -365,9 +374,14 @@ func (a *App) StopRecording() (string, error) {
 		return wavPath, runErr
 	}
 
-	// Return the recording ID as a string instead of file path
-	// This way the UI can use it for transcription
-	return fmt.Sprintf("%d", dbRecording.ID), nil
+	// Return the file path for Tools mode, or recording ID for Auto mode
+	if recordingID > 0 {
+		// Auto mode: return recording ID for transcription
+		return fmt.Sprintf("%d", recordingID), nil
+	} else {
+		// Tools mode: return file path for manual use
+		return wavPath, nil
+	}
 }
 
 // Transcribe runs whisper.cpp on a recording and returns the transcript content.
@@ -420,15 +434,32 @@ func (a *App) Transcribe(wavPathOrID string) (string, error) {
 	}
 
 	startTime := time.Now()
-	txtPath, err := execx.RunWhisper(whisperBin, modelPath, wavPath, outDir, "en", 0, "")
+
+	// Create a temporary directory for whisper processing to avoid cluttering ./out
+	tempDir := filepath.Join(outDir, "temp")
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create temp directory: %w", err)
+	}
+
+	txtPath, err := execx.RunWhisper(whisperBin, modelPath, wavPath, tempDir, "en", 0, "")
 	if err != nil {
+		// Clean up temp directory on error
+		os.RemoveAll(tempDir)
 		return "", err
 	}
 
 	// Read transcript content
 	transcriptContent, err := os.ReadFile(txtPath)
 	if err != nil {
+		os.RemoveAll(tempDir)
 		return txtPath, fmt.Errorf("failed to read transcript file: %w", err)
+	}
+
+	// Read log content
+	logPath := strings.TrimSuffix(txtPath, ".txt") + ".log"
+	logContent := ""
+	if logData, err := os.ReadFile(logPath); err == nil {
+		logContent = string(logData)
 	}
 
 	// Calculate processing time
@@ -444,15 +475,43 @@ func (a *App) Transcribe(wavPathOrID string) (string, error) {
 	}
 
 	if err := a.database.CreateTranscript(dbTranscript); err != nil {
+		os.RemoveAll(tempDir)
 		return txtPath, fmt.Errorf("failed to save transcript to database: %w", err)
 	}
 
-	// Clean up temporary WAV file if it was created from database
-	if dbRecording != nil && wavPathOrID != wavPath {
-		// This was a temporary file created from database data, clean it up
-		if err := os.Remove(wavPath); err != nil {
-			fmt.Printf("Warning: failed to remove temporary WAV file %s: %v\n", wavPath, err)
-		}
+	// Save processing metadata with log content
+	endTime := time.Now()
+	modelUsed := "ggml-base.en"
+	parameters := `{"language":"en","threads":0,"extraArgs":""}`
+	logFilePath := logPath
+	if logContent != "" {
+		logFilePath = logContent
+	}
+
+	processingMetadata := &db.ProcessingMetadata{
+		RecordingID:     &dbRecording.ID,
+		TranscriptID:    &dbTranscript.ID,
+		ProcessType:     "transcription",
+		Status:          "completed",
+		ModelUsed:       &modelUsed,
+		Parameters:      &parameters,
+		StartTime:       startTime,
+		EndTime:         &endTime,
+		DurationSeconds: &processingTimeSeconds,
+		LogFilePath:     &logFilePath,
+	}
+
+	if err := a.database.CreateProcessingMetadata(processingMetadata); err != nil {
+		// Non-fatal error, just log it
+		fmt.Printf("Warning: failed to save processing metadata: %v\n", err)
+	}
+
+	// Clean up temporary files
+	os.RemoveAll(tempDir)
+
+	// Clean up WAV file after successful transcription
+	if err := os.Remove(wavPath); err != nil {
+		fmt.Printf("Warning: failed to remove WAV file %s: %v\n", wavPath, err)
 	}
 
 	// Return the transcript content instead of file path
@@ -509,7 +568,7 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 	}
 	prompt := promptConfig.Prompt
 
-	// Get the prompt from database to get the ID
+	// Get the prompt from database to get the ID and display name
 	dbPrompt, err := a.database.GetPromptByName(a.GetSelectedPrompt())
 	if err != nil {
 		return "", fmt.Errorf("failed to get prompt from database: %w", err)
@@ -581,7 +640,11 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 	var localModelPath *string
 
 	if uiCfg.UseLocalAI {
-		modelUsed = "llama-local"
+		// Extract model name from the model file path
+		modelName := filepath.Base(uiCfg.LlamaModel)
+		// Remove .gguf extension if present
+		modelName = strings.TrimSuffix(modelName, ".gguf")
+		modelUsed = modelName
 		localModelPath = &uiCfg.LlamaModel
 	} else {
 		cfg, _ := a.loadLLMConfig("./configs/remote.json")
@@ -595,7 +658,7 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 	dbSummary := &db.Summary{
 		TranscriptID:   dbTranscript.ID,
 		Content:        summary,
-		SummaryType:    a.GetSelectedPrompt(),
+		SummaryType:    dbPrompt.DisplayName,
 		ModelUsed:      modelUsed,
 		PromptUsed:     prompt,
 		PromptID:       &dbPrompt.ID,
@@ -809,7 +872,15 @@ func mixS16Mono(loop, mic []byte) []byte {
 }
 
 // StartRecordingAdvanced allows selecting dictation mode (mic only) vs loopback+optional mic.
+// If isToolsMode is true, saves to OutDir/saved for permanent storage (Tools tab).
+// If isToolsMode is false, saves to OutDir for temporary processing (Auto tab).
 func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, error) {
+	fmt.Printf("DEBUG: StartRecordingAdvanced called with withMic=%v, dictation=%v, isToolsMode=false\n", withMic, dictation)
+	return a.startRecordingAdvancedInternal(withMic, dictation, false)
+}
+
+// StartRecordingAdvancedInternal is the internal implementation that handles both Auto and Tools modes.
+func (a *App) startRecordingAdvancedInternal(withMic bool, dictation bool, isToolsMode bool) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.recording {
@@ -817,7 +888,20 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 	}
 
 	cfg := a.settings.Get()
-	if err := os.MkdirAll(cfg.OutDir, 0755); err != nil {
+
+	// Determine output directory based on mode
+	var outputDir string
+	if isToolsMode {
+		// Tools mode: save to OutDir/saved for permanent storage
+		outputDir = filepath.Join(cfg.OutDir, "saved")
+		fmt.Printf("DEBUG: Tools mode - saving to %s\n", outputDir)
+	} else {
+		// Auto mode: save to OutDir for temporary processing
+		outputDir = cfg.OutDir
+		fmt.Printf("DEBUG: Auto mode - saving to %s\n", outputDir)
+	}
+
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return "", err
 	}
 
@@ -828,38 +912,41 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 	startTime := time.Now()
 	ts := startTime.Format("20060102_150405")
 
-	// Create a temporary file for recording (we'll store the data in DB later)
-	wavPath := filepath.Join(cfg.OutDir, ts+".wav")
+	// Create a file for recording
+	wavPath := filepath.Join(outputDir, ts+".wav")
 	writer, err := wav.NewWriter(wavPath, sampleRate, uint16(channels), bits)
 	if err != nil {
 		return "", fmt.Errorf("open wav: %w", err)
 	}
 
-	// Create recording entry in database (without audio data initially)
-	recordingMode := "loopback"
-	if dictation {
-		recordingMode = "dictation"
-	} else if withMic {
-		recordingMode = "mixed"
-	}
+	// Create recording entry in database (only for Auto mode)
+	var dbRecording *db.Recording
+	if !isToolsMode {
+		recordingMode := "loopback"
+		if dictation {
+			recordingMode = "dictation"
+		} else if withMic {
+			recordingMode = "mixed"
+		}
 
-	dbRecording := &db.Recording{
-		Filename:       ts + ".wav",
-		FilePath:       wavPath,
-		FileSize:       0, // Will be updated when recording stops
-		SampleRate:     int(sampleRate),
-		Channels:       int(channels),
-		BitsPerSample:  int(bits),
-		AudioFormat:    "PCM S16LE",
-		RecordingMode:  recordingMode,
-		WithMicrophone: withMic,
-		RecordedAt:     &startTime, // Store when recording started
-		AudioData:      nil,        // Will be populated when recording stops
-	}
+		dbRecording = &db.Recording{
+			Filename:       ts + ".wav",
+			FilePath:       wavPath,
+			FileSize:       0, // Will be updated when recording stops
+			SampleRate:     int(sampleRate),
+			Channels:       int(channels),
+			BitsPerSample:  int(bits),
+			AudioFormat:    "PCM S16LE",
+			RecordingMode:  recordingMode,
+			WithMicrophone: withMic,
+			RecordedAt:     &startTime, // Store when recording started
+			AudioData:      nil,        // Will be populated when recording stops
+		}
 
-	if err := a.database.CreateRecording(dbRecording); err != nil {
-		_ = writer.Close()
-		return "", fmt.Errorf("failed to create recording in database: %w", err)
+		if err := a.database.CreateRecording(dbRecording); err != nil {
+			_ = writer.Close()
+			return "", fmt.Errorf("failed to create recording in database: %w", err)
+		}
 	}
 
 	var rec *audio.Recorder
@@ -982,7 +1069,11 @@ func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, erro
 	}()
 
 	a.recording = true
-	a.recordingID = dbRecording.ID
+	if dbRecording != nil {
+		a.recordingID = dbRecording.ID
+	} else {
+		a.recordingID = 0 // Tools mode doesn't use database
+	}
 	a.dictation = dictation
 	a.rec = rec
 	a.mic = mic
@@ -1303,6 +1394,41 @@ func (a *App) GetTranscriptContent(recordingID int) (string, error) {
 	return transcript.Content, nil
 }
 
+// GetRecordingsWithTranscripts returns recordings that have transcripts available for summarisation
+func (a *App) GetRecordingsWithTranscripts() ([]*db.RecordingWithTranscript, error) {
+	if a.database == nil {
+		return nil, errors.New("database not initialized")
+	}
+
+	return a.database.GetRecordingsWithTranscripts()
+}
+
+// SummariseTranscript summarises a transcript directly from content without needing a file
+func (a *App) SummariseTranscript(transcriptContent string) (string, error) {
+	// Get current settings to access output directory
+	settings := a.settings.Get()
+
+	// Create a temporary file for the summarise method
+	tempFile := filepath.Join(settings.OutDir, fmt.Sprintf("temp_transcript_%d.txt", time.Now().UnixNano()))
+
+	// Write transcript content to temporary file
+	err := os.WriteFile(tempFile, []byte(transcriptContent), 0644)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary file: %w", err)
+	}
+
+	// Clean up temporary file after summarisation
+	defer func() {
+		if removeErr := os.Remove(tempFile); removeErr != nil {
+			// Log error but don't fail the operation
+			fmt.Printf("Warning: failed to remove temporary file %s: %v\n", tempFile, removeErr)
+		}
+	}()
+
+	// Use existing summarise method
+	return a.Summarise(tempFile)
+}
+
 // PickDatabaseFile opens a file picker for selecting a database file
 func (a *App) PickDatabaseFile() (string, error) {
 	if a.uiCtx == nil {
@@ -1523,4 +1649,40 @@ func (a *App) GetAudioDataURL(wavPathOrID string) (string, error) {
 
 	// Return as data URL
 	return "data:audio/wav;base64," + base64Data, nil
+}
+
+// UpdateRecording updates a recording in the database
+func (a *App) UpdateRecording(recordingID int, updates map[string]interface{}) error {
+	// Get the current recording
+	recording, err := a.database.GetRecording(recordingID)
+	if err != nil {
+		return fmt.Errorf("failed to get recording: %w", err)
+	}
+
+	// Apply updates - only date/time for now
+	if recordedAt, ok := updates["recorded_at"].(string); ok {
+		if t, err := time.Parse("2006-01-02T15:04:05", recordedAt); err == nil {
+			recording.RecordedAt = &t
+		}
+	}
+
+	// Update in database
+	return a.database.UpdateRecording(recording)
+}
+
+// UpdateSummary updates a summary in the database
+func (a *App) UpdateSummary(summaryID int, updates map[string]interface{}) error {
+	// Get the current summary
+	summary, err := a.database.GetSummary(summaryID)
+	if err != nil {
+		return fmt.Errorf("failed to get summary: %w", err)
+	}
+
+	// Apply updates - only model for now
+	if modelUsed, ok := updates["model_used"].(string); ok {
+		summary.ModelUsed = modelUsed
+	}
+
+	// Update in database
+	return a.database.UpdateSummary(summary)
 }
