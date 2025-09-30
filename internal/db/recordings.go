@@ -12,8 +12,9 @@ func (db *DB) CreateRecording(recording *Recording) error {
 		INSERT INTO recordings (
 			filename, display_name, file_path, file_size, duration_seconds,
 			sample_rate, channels, bits_per_sample, audio_format,
-			recording_mode, with_microphone, recorded_at, notes, tags, audio_data
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			recording_mode, with_microphone, recorded_at, notes, tags, audio_data,
+			error_message, retry_file_path
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := db.Exec(query,
 		recording.Filename,
@@ -31,6 +32,8 @@ func (db *DB) CreateRecording(recording *Recording) error {
 		nullString(recording.Notes),
 		nullString(recording.Tags),
 		recording.AudioData,
+		nullString(recording.ErrorMessage),
+		nullString(recording.RetryFilePath),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create recording: %w", err)
@@ -51,11 +54,12 @@ func (db *DB) GetRecording(id int) (*Recording, error) {
 	query := `
 		SELECT id, filename, display_name, file_path, file_size, duration_seconds,
 		       sample_rate, channels, bits_per_sample, audio_format,
-		       recording_mode, with_microphone, created_at, recorded_at, notes, tags, audio_data
+		       recording_mode, with_microphone, created_at, recorded_at, notes, tags, audio_data,
+		       error_message, retry_file_path
 		FROM recordings WHERE id = ?`
 
 	var recording Recording
-	var displayName, notes, tags sql.NullString
+	var displayName, notes, tags, errorMessage, retryFilePath sql.NullString
 	var recordedAt sql.NullTime
 	var durationSeconds sql.NullFloat64
 
@@ -77,6 +81,8 @@ func (db *DB) GetRecording(id int) (*Recording, error) {
 		&notes,
 		&tags,
 		&recording.AudioData,
+		&errorMessage,
+		&retryFilePath,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -90,6 +96,8 @@ func (db *DB) GetRecording(id int) (*Recording, error) {
 	recording.RecordedAt = timePtr(recordedAt)
 	recording.Notes = stringPtr(notes)
 	recording.Tags = stringPtr(tags)
+	recording.ErrorMessage = stringPtr(errorMessage)
+	recording.RetryFilePath = stringPtr(retryFilePath)
 
 	return &recording, nil
 }
@@ -99,11 +107,12 @@ func (db *DB) GetRecordingByFilename(filename string) (*Recording, error) {
 	query := `
 		SELECT id, filename, display_name, file_path, file_size, duration_seconds,
 		       sample_rate, channels, bits_per_sample, audio_format,
-		       recording_mode, with_microphone, created_at, recorded_at, notes, tags, audio_data
+		       recording_mode, with_microphone, created_at, recorded_at, notes, tags, audio_data,
+		       error_message, retry_file_path
 		FROM recordings WHERE filename = ?`
 
 	var recording Recording
-	var displayName, notes, tags sql.NullString
+	var displayName, notes, tags, errorMessage, retryFilePath sql.NullString
 	var recordedAt sql.NullTime
 	var durationSeconds sql.NullFloat64
 
@@ -125,6 +134,8 @@ func (db *DB) GetRecordingByFilename(filename string) (*Recording, error) {
 		&notes,
 		&tags,
 		&recording.AudioData,
+		&errorMessage,
+		&retryFilePath,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -138,6 +149,8 @@ func (db *DB) GetRecordingByFilename(filename string) (*Recording, error) {
 	recording.RecordedAt = timePtr(recordedAt)
 	recording.Notes = stringPtr(notes)
 	recording.Tags = stringPtr(tags)
+	recording.ErrorMessage = stringPtr(errorMessage)
+	recording.RetryFilePath = stringPtr(retryFilePath)
 
 	return &recording, nil
 }
@@ -147,7 +160,8 @@ func (db *DB) ListRecordings(limit, offset int, mode, tag *string) ([]*Recording
 	query := `
 		SELECT id, filename, display_name, file_path, file_size, duration_seconds,
 		       sample_rate, channels, bits_per_sample, audio_format,
-		       recording_mode, with_microphone, created_at, recorded_at, notes, tags, audio_data
+		       recording_mode, with_microphone, created_at, recorded_at, notes, tags, audio_data,
+		       error_message, retry_file_path
 		FROM recordings WHERE 1=1`
 
 	args := []interface{}{}
@@ -180,7 +194,7 @@ func (db *DB) ListRecordings(limit, offset int, mode, tag *string) ([]*Recording
 	var recordings []*Recording
 	for rows.Next() {
 		var recording Recording
-		var displayName, notes, tags sql.NullString
+		var displayName, notes, tags, errorMessage, retryFilePath sql.NullString
 		var recordedAt sql.NullTime
 		var durationSeconds sql.NullFloat64
 
@@ -202,6 +216,8 @@ func (db *DB) ListRecordings(limit, offset int, mode, tag *string) ([]*Recording
 			&notes,
 			&tags,
 			&recording.AudioData,
+			&errorMessage,
+			&retryFilePath,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan recording: %w", err)
@@ -212,6 +228,8 @@ func (db *DB) ListRecordings(limit, offset int, mode, tag *string) ([]*Recording
 		recording.RecordedAt = timePtr(recordedAt)
 		recording.Notes = stringPtr(notes)
 		recording.Tags = stringPtr(tags)
+		recording.ErrorMessage = stringPtr(errorMessage)
+		recording.RetryFilePath = stringPtr(retryFilePath)
 
 		recordings = append(recordings, &recording)
 	}
@@ -230,7 +248,8 @@ func (db *DB) UpdateRecording(recording *Recording) error {
 			display_name = ?, file_size = ?, duration_seconds = ?,
 			recorded_at = ?, notes = ?, tags = ?, audio_data = ?,
 			recording_mode = ?, with_microphone = ?, sample_rate = ?,
-			channels = ?, bits_per_sample = ?, audio_format = ?
+			channels = ?, bits_per_sample = ?, audio_format = ?,
+			error_message = ?, retry_file_path = ?
 		WHERE id = ?`
 
 	result, err := db.Exec(query,
@@ -247,6 +266,8 @@ func (db *DB) UpdateRecording(recording *Recording) error {
 		recording.Channels,
 		recording.BitsPerSample,
 		recording.AudioFormat,
+		nullString(recording.ErrorMessage),
+		nullString(recording.RetryFilePath),
 		recording.ID,
 	)
 	if err != nil {
@@ -284,32 +305,28 @@ func (db *DB) DeleteRecording(id int) error {
 	return nil
 }
 
-// GetRecordingWithDetails retrieves a recording with its transcript and summary
+// GetRecordingWithDetails retrieves a recording with its transcript and summaries
 func (db *DB) GetRecordingWithDetails(id int) (*RecordingWithDetails, error) {
 	query := `
 		SELECT
 			r.id, r.filename, r.display_name, r.file_path, r.file_size, r.duration_seconds,
 			r.sample_rate, r.channels, r.bits_per_sample, r.audio_format,
 			r.recording_mode, r.with_microphone, r.created_at, r.recorded_at, r.notes, r.tags, r.audio_data,
+			r.error_message, r.retry_file_path,
 			t.id as transcript_id, t.content as transcript_content, t.model_used as transcript_model,
-			t.confidence_score, t.created_at as transcribed_at,
-			s.id as summary_id, s.content as summary_content, s.summary_type,
-			s.model_used as summary_model, s.created_at as summarized_at
+			t.confidence_score, t.created_at as transcribed_at
 		FROM recordings r
 		LEFT JOIN transcripts t ON r.id = t.recording_id
-		LEFT JOIN summaries s ON t.id = s.transcript_id
 		WHERE r.id = ?`
 
 	var details RecordingWithDetails
-	var displayName, notes, tags sql.NullString
+	var displayName, notes, tags, errorMessage, retryFilePath sql.NullString
 	var recordedAt sql.NullTime
 	var durationSeconds sql.NullFloat64
-	var transcriptID, summaryID sql.NullInt64
+	var transcriptID sql.NullInt64
 	var transcriptContent, transcriptModel sql.NullString
 	var confidenceScore sql.NullFloat64
 	var transcribedAt sql.NullTime
-	var summaryContent, summaryType, summaryModel sql.NullString
-	var summarizedAt sql.NullTime
 
 	err := db.QueryRow(query, id).Scan(
 		&details.ID,
@@ -329,16 +346,13 @@ func (db *DB) GetRecordingWithDetails(id int) (*RecordingWithDetails, error) {
 		&notes,
 		&tags,
 		&details.AudioData,
+		&errorMessage,
+		&retryFilePath,
 		&transcriptID,
 		&transcriptContent,
 		&transcriptModel,
 		&confidenceScore,
 		&transcribedAt,
-		&summaryID,
-		&summaryContent,
-		&summaryType,
-		&summaryModel,
-		&summarizedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -352,21 +366,22 @@ func (db *DB) GetRecordingWithDetails(id int) (*RecordingWithDetails, error) {
 	details.RecordedAt = timePtr(recordedAt)
 	details.Notes = stringPtr(notes)
 	details.Tags = stringPtr(tags)
+	details.ErrorMessage = stringPtr(errorMessage)
+	details.RetryFilePath = stringPtr(retryFilePath)
 
 	if transcriptID.Valid {
-		details.TranscriptID = intPtr(int(transcriptID.Int64))
+		id := int(transcriptID.Int64)
+		details.TranscriptID = intPtr(id)
 		details.TranscriptContent = stringPtr(transcriptContent)
 		details.TranscriptModel = stringPtr(transcriptModel)
 		details.ConfidenceScore = float64Ptr(confidenceScore)
 		details.TranscribedAt = timePtr(transcribedAt)
-	}
 
-	if summaryID.Valid {
-		details.SummaryID = intPtr(int(summaryID.Int64))
-		details.SummaryContent = stringPtr(summaryContent)
-		details.SummaryType = stringPtr(summaryType)
-		details.SummaryModel = stringPtr(summaryModel)
-		details.SummarizedAt = timePtr(summarizedAt)
+		// Fetch all summaries for this transcript
+		summaries, err := db.GetSummariesByTranscriptID(id)
+		if err == nil && len(summaries) > 0 {
+			details.Summaries = summaries
+		}
 	}
 
 	return &details, nil
@@ -429,18 +444,16 @@ func intPtrFromNull(ni sql.NullInt64) *int {
 
 // GetRecordingsWithDetails returns recordings with their transcripts and summaries
 func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithDetails, error) {
+	// First, get recordings with transcript information (no summary JOIN to avoid duplication)
 	query := `
-		SELECT 
+		SELECT
 			r.id, r.filename, r.display_name, r.file_path, r.file_size, r.duration_seconds,
 			r.sample_rate, r.channels, r.bits_per_sample, r.audio_format,
 			r.recording_mode, r.with_microphone, r.created_at, r.recorded_at, r.notes, r.tags,
 			t.id as transcript_id, t.content as transcript_content, t.model_used as transcript_model,
-			t.confidence_score, t.created_at as transcript_created_at,
-			s.id as summary_id, s.content as summary_content, s.summary_type, s.model_used as summary_model,
-			s.created_at as summary_created_at
+			t.confidence_score, t.created_at as transcript_created_at
 		FROM recordings r
 		LEFT JOIN transcripts t ON r.id = t.recording_id
-		LEFT JOIN summaries s ON t.id = s.transcript_id
 		ORDER BY r.id DESC
 		LIMIT ? OFFSET ?`
 
@@ -459,11 +472,6 @@ func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithD
 		var transcriptModel sql.NullString
 		var confidenceScore sql.NullFloat64
 		var transcriptCreatedAt sql.NullTime
-		var summaryID sql.NullInt64
-		var summaryContent sql.NullString
-		var summaryType sql.NullString
-		var summaryModel sql.NullString
-		var summaryCreatedAt sql.NullTime
 
 		err := rows.Scan(
 			&recording.ID, &recording.Filename, &recording.DisplayName, &recording.FilePath,
@@ -472,7 +480,6 @@ func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithD
 			&recording.RecordingMode, &recording.WithMicrophone, &recording.CreatedAt,
 			&recording.RecordedAt, &recording.Notes, &recording.Tags,
 			&transcriptID, &transcriptContent, &transcriptModel, &confidenceScore, &transcriptCreatedAt,
-			&summaryID, &summaryContent, &summaryType, &summaryModel, &summaryCreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan recording with details: %w", err)
@@ -482,6 +489,12 @@ func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithD
 		if transcriptID.Valid {
 			id := int(transcriptID.Int64)
 			recording.TranscriptID = &id
+
+			// Fetch all summaries for this transcript
+			summaries, err := db.GetSummariesByTranscriptID(id)
+			if err == nil && len(summaries) > 0 {
+				recording.Summaries = summaries
+			}
 		}
 		if transcriptContent.Valid {
 			recording.TranscriptContent = &transcriptContent.String
@@ -494,24 +507,6 @@ func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithD
 		}
 		if transcriptCreatedAt.Valid {
 			recording.TranscribedAt = &transcriptCreatedAt.Time
-		}
-
-		// Set summary fields if available
-		if summaryID.Valid {
-			id := int(summaryID.Int64)
-			recording.SummaryID = &id
-		}
-		if summaryContent.Valid {
-			recording.SummaryContent = &summaryContent.String
-		}
-		if summaryType.Valid {
-			recording.SummaryType = &summaryType.String
-		}
-		if summaryModel.Valid {
-			recording.SummaryModel = &summaryModel.String
-		}
-		if summaryCreatedAt.Valid {
-			recording.SummarizedAt = &summaryCreatedAt.Time
 		}
 
 		recordings = append(recordings, &recording)

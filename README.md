@@ -10,9 +10,8 @@ A Windows-only meeting & dictation recorder, featuring local transcription, AI-p
 - **Live Spectrum Analyser**: Real-time visualisation of audio activity in the GUI
 - **High-Quality Transcription**: whisper.cpp integration with multiple model support
 - **AI-Powered Summarisation**: Use any OpenAI compatible API endpoint (instructions included for local [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master) usage)
-- **Secure Audio Playback**: In-GUI audio players for listening to recorded WAV files
 - **Formatted Output**: Markdown rendering for transcripts and summaries
-- **Database Management**: SQLite database with full-text search and metadata tracking
+- **Database Management**: SQLite database with full-text search and metadata tracking (audio deleted after transcription for minimal storage)
 - **Multiple Prompt Types**: Meeting, dictation, and technical summarization prompts
 - **Tagging System**: Organize recordings with color-coded tags
 - **Small Footprint**: Less than 15mb executable  
@@ -41,9 +40,9 @@ cp .\build\bin\blackbox-gui.exe .\blackbox-gui.exe
 
 - **Format**: PCM S16LE (16-bit signed little-endian)
 - **Sample Rate**: 16 kHz
-- **Channels**: Stereo (loopback) + Mono (microphone)
+- **Channels**: Mono (optimized for speech recognition)
 - **Quality**: Optimised for transcription while maintaining excellent audio clarity
-- **File Sizes**: ~1.6-2.0 MB per minute
+- **File Sizes**: ~2 MB per minute (deleted after successful transcription)
 
 ## Configuration
 
@@ -153,9 +152,14 @@ Use cloud-based AI services for summarisation with any OpenAI-compatible API.
 {
   "base_url": "https://api.openai.com/v1",
   "api_key": "sk-proj-your-openai-key",
-  "model": "gpt-5-mini"
+  "model": "gpt-5-mini",
+  "temperature": 0.2,
+  "max_tokens": 2048
 }
 ```
+
+- These fields map directly to the Remote AI section inside the Settings tab.
+- Non-OpenAI providers can be used as long as they honour OpenAI-compatible `/chat/completions` semantics.
 
 #### App Settings (+ Local AI Server Parameters) (`./config/ui.json`)
 ```json
@@ -179,11 +183,13 @@ Blackbox includes a comprehensive SQLite database for managing all recordings, t
 - **Full-Text Search**: Search across all transcripts using SQLite FTS5
 - **Tagging System**: Organize recordings with color-coded tags
 - **Processing History**: Track transcription and summarization performance
+- **Error Tracking**: Failed transcriptions stored in `./out/retry/` with error details in database
 - **Data Integrity**: Foreign key constraints and data validation
 - **Views and Indexes**: Optimized queries for common operations
+- **Minimal Storage**: Audio NOT stored in database (~1KB per recording)
 
 ### Database Schema
-- **recordings**: Audio file metadata and user notes
+- **recordings**: Metadata only (no audio data) - filename, duration, sample rate, error tracking
 - **transcripts**: Transcription data with confidence scores
 - **summaries**: AI-generated summaries with prompt tracking
 - **tags**: Flexible organization system
@@ -213,9 +219,8 @@ Blackbox includes a comprehensive SQLite database for managing all recordings, t
 5. Begin your meeting/dictation
 6. Once done, click "Stop Recording"
 7. The application will automatically transcribe + summarise your recording
-8. Listen to your recording using the built-in audio player
-9. View formatted output in the dedicated markdown section
-10. All data is automatically stored in the database for future reference
+8. View formatted output in the dedicated markdown section
+9. Audio is deleted after successful transcription; transcripts and summaries stored in database
 
 ### Advanced Recording Modes
 - **Loopback Only**: System audio capture with spectrum visualisation
@@ -223,7 +228,6 @@ Blackbox includes a comprehensive SQLite database for managing all recordings, t
 - **Dictation Mode**: Microphone-only with mic-focused visualisation
 
 ### UI Features
-- **Audio Playback**: Listen to recorded WAV files directly in the GUI using secure data URLs
 - **Formatted Output**: Transcripts and summaries are rendered as beautiful markdown
 - **System Messages**: Clear status updates separate from formatted content
 - **Real-time Feedback**: Live spectrum analyser shows audio activity during recording
@@ -231,6 +235,7 @@ Blackbox includes a comprehensive SQLite database for managing all recordings, t
 - **Search Functionality**: Full-text search across all transcripts
 - **Tagging System**: Organize recordings with color-coded tags
 - **Prompt Selection**: Choose from Meeting, Dictation, or Technical summarization styles
+- **Minimal Storage**: Audio deleted after transcription, only text/metadata retained (~1KB per recording)
 
 ## Troubleshooting
 
@@ -239,11 +244,11 @@ Blackbox includes a comprehensive SQLite database for managing all recordings, t
 2. **Spectrum Analyser Not Moving**: Ensure audio is playing and recording is active, ensure you are using the correct audio interface in Windows settings
 3. **Whisper Errors**: Verify binary path and model existence, refer to [whisper-cli](https://github.com/ggml-org/whisper.cpp)
 4. **GUI Not Responding**: Ensure WebView2 runtime is installed
-5. **Audio Playback Not Working**: Check browser console for errors, verify WAV file exists
-6. **Markdown Not Rendering**: Ensure internet connection for marked.js CDN, check browser console
-7. **Database Errors**: Check database file permissions and ensure migrations are applied
-8. **Search Not Working**: Verify FTS5 extension is available in SQLite
-9. **Prompt Loading Fails**: Check prompt JSON file syntax and structure
+5. **Markdown Not Rendering**: Ensure internet connection for marked.js CDN, check browser console
+6. **Database Errors**: Check database file permissions and ensure migrations are applied
+7. **Search Not Working**: Verify FTS5 extension is available in SQLite
+8. **Prompt Loading Fails**: Check prompt JSON file syntax and structure
+9. **Transcription Failed**: Check `./out/retry/` directory for saved audio files with error details in database
 
 ## Future Enhancements
 

@@ -3,7 +3,6 @@ package ui
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -110,6 +109,78 @@ func NewApp(settingsPath string) (*App, error) {
 	}()
 
 	return app, nil
+}
+
+// formatRecordingTimestamp returns a user-facing ISO-like timestamp in the local timezone.
+func formatRecordingTimestamp(t time.Time) string {
+	return t.In(time.Local).Format("2006-01-02T15:04:05")
+}
+
+const maxMeetingTitleRunes = 120
+
+// buildRecordingDisplayName combines a short theme with the recording timestamp.
+func buildRecordingDisplayName(title string, recordedAt *time.Time) string {
+	timestampSource := time.Now()
+	if recordedAt != nil && !recordedAt.IsZero() {
+		timestampSource = *recordedAt
+	}
+	timestamp := formatRecordingTimestamp(timestampSource)
+	cleanTitle := strings.Join(strings.Fields(strings.TrimSpace(title)), " ")
+	if cleanTitle == "" {
+		return timestamp
+	}
+	runes := []rune(cleanTitle)
+	if len(runes) > maxMeetingTitleRunes {
+		cleanTitle = string(runes[:maxMeetingTitleRunes])
+	}
+	return fmt.Sprintf("%s - %s", cleanTitle, timestamp)
+}
+
+// augmentPromptForStructuredSummary appends output-format instructions to the base prompt.
+func augmentPromptForStructuredSummary(base string) string {
+	formatInstructions := `You must respond with a single JSON object on one line with the following keys:
+- "meeting_title": A concise title describing the overall theme (no date/time, no trailing punctuation, <= 100 characters).
+- "summary_markdown": The full Markdown summary that satisfies all requirements above.
+Escape newlines in "summary_markdown" using \n. Do not include code fences, comments, or any text outside the JSON object.`
+	return strings.TrimRight(base, "\n") + "\n\n" + formatInstructions
+}
+
+type summaryPayload struct {
+	MeetingTitle    string `json:"meeting_title"`
+	SummaryMarkdown string `json:"summary_markdown"`
+}
+
+// parseSummaryPayload extracts the structured data from the model response.
+func parseSummaryPayload(raw string) (*summaryPayload, error) {
+	trimmed := stripJSONCodeFence(strings.TrimSpace(raw))
+	var payload summaryPayload
+	if err := json.Unmarshal([]byte(trimmed), &payload); err == nil {
+		return &payload, nil
+	}
+	start := strings.Index(trimmed, "{")
+	end := strings.LastIndex(trimmed, "}")
+	if start >= 0 && end >= start {
+		candidate := trimmed[start : end+1]
+		if err := json.Unmarshal([]byte(candidate), &payload); err == nil {
+			return &payload, nil
+		}
+	}
+	return nil, fmt.Errorf("could not parse summarisation payload")
+}
+
+func stripJSONCodeFence(s string) string {
+	trimmed := strings.TrimSpace(s)
+	if !strings.HasPrefix(trimmed, "```") {
+		return trimmed
+	}
+	withoutFence := trimmed[3:]
+	withoutFence = strings.TrimPrefix(withoutFence, "json")
+	withoutFence = strings.TrimPrefix(withoutFence, "JSON")
+	withoutFence = strings.TrimLeft(withoutFence, "\n\r ")
+	if idx := strings.LastIndex(withoutFence, "```"); idx != -1 {
+		withoutFence = withoutFence[:idx]
+	}
+	return strings.TrimSpace(withoutFence)
 }
 
 // Close closes the database connection and cleans up resources
@@ -433,31 +504,32 @@ func (a *App) StopRecording() (string, error) {
 	var recordingID int
 	if a.recordingID > 0 {
 		recordingID = a.recordingID
-		// Read the WAV file data
-		audioData, err := os.ReadFile(wavPath)
+		// Get file size for metadata (don't read the entire file)
+		fileInfo, err := os.Stat(wavPath)
 		if err != nil {
-			return wavPath, fmt.Errorf("read wav file: %w", err)
+			return wavPath, fmt.Errorf("failed to get file info: %w", err)
 		}
 
 		// Calculate duration based on file size and audio format
 		// PCM S16LE, 16kHz, mono: 2 bytes per sample, 16000 samples per second
-		durationSeconds := float64(len(audioData)) / (16000.0 * 2.0)
+		durationSeconds := float64(fileInfo.Size()) / (16000.0 * 2.0)
 
-		// Update recording in database with audio data
+		// Update recording in database with metadata only (NO audio_data)
 		dbRecording, err := a.database.GetRecording(a.recordingID)
 		if err != nil {
 			return wavPath, fmt.Errorf("failed to get recording from database: %w", err)
 		}
 
-		dbRecording.FileSize = int64(len(audioData))
+		dbRecording.FileSize = fileInfo.Size()
 		dbRecording.DurationSeconds = &durationSeconds
-		dbRecording.AudioData = audioData
+		// Explicitly set AudioData to nil to avoid storing it
+		dbRecording.AudioData = nil
 
 		if err := a.database.UpdateRecording(dbRecording); err != nil {
 			return wavPath, fmt.Errorf("failed to update recording in database: %w", err)
 		}
 
-		// Keep the WAV file for potential transcription - it will be cleaned up after successful transcription
+		// Keep the WAV file on disk - it will be deleted after successful transcription or moved to retry/ on failure
 	}
 
 	// Clear recording ID
@@ -510,12 +582,12 @@ func (a *App) Transcribe(wavPathOrID string) (string, error) {
 			return "", fmt.Errorf("failed to get recording from database: %w", err)
 		}
 
-		// Create temporary WAV file from database audio data
+		// Use existing WAV file from disk (audio data is no longer stored in database)
 		wavPath = filepath.Join(outDir, dbRecording.Filename)
-		if err := os.WriteFile(wavPath, dbRecording.AudioData, 0644); err != nil {
-			return "", fmt.Errorf("failed to create temporary WAV file: %w", err)
+		if _, err := os.Stat(wavPath); err != nil {
+			return "", fmt.Errorf("WAV file not found on disk: %w", err)
 		}
-		defer os.Remove(wavPath) // Clean up temporary file
+		// Note: WAV file will be cleaned up after successful transcription or moved to retry/ on failure
 	} else {
 		// It's a file path (backwards compatibility)
 		wavPath = wavPathOrID
@@ -538,6 +610,35 @@ func (a *App) Transcribe(wavPathOrID string) (string, error) {
 	if err != nil {
 		// Clean up temp directory on error
 		os.RemoveAll(tempDir)
+
+		// Handle failed transcription - move WAV to retry/ and update database
+		if dbRecording != nil {
+			retryDir := filepath.Join(outDir, "retry")
+			if err := os.MkdirAll(retryDir, 0755); err != nil {
+				return "", fmt.Errorf("transcription failed: %v; also failed to create retry directory: %w", err, err)
+			}
+
+			// Move WAV file to retry directory
+			retryPath := filepath.Join(retryDir, dbRecording.Filename)
+			if err := os.Rename(wavPath, retryPath); err != nil {
+				// If rename fails (cross-device link), try copy + delete
+				if copyErr := copyFile(wavPath, retryPath); copyErr != nil {
+					return "", fmt.Errorf("transcription failed: %v; also failed to move WAV to retry: %w", err, copyErr)
+				}
+				os.Remove(wavPath)
+			}
+
+			// Update recording with error message and retry file path
+			errorMsg := fmt.Sprintf("Transcription failed: %v", err)
+			dbRecording.ErrorMessage = &errorMsg
+			dbRecording.RetryFilePath = &retryPath
+			if updateErr := a.database.UpdateRecording(dbRecording); updateErr != nil {
+				fmt.Printf("Warning: failed to update recording with error info: %v\n", updateErr)
+			}
+
+			return "", fmt.Errorf("transcription failed and recording saved to %s for retry: %w", retryPath, err)
+		}
+
 		return "", err
 	}
 
@@ -694,6 +795,7 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		return "", fmt.Errorf("failed to get prompt config: %w", err)
 	}
 	prompt := promptConfig.Prompt
+	structuredPrompt := augmentPromptForStructuredSummary(prompt)
 
 	// Get the prompt from database to get the ID and display name
 	dbPrompt, err := a.database.GetPromptByName(a.GetSelectedPrompt())
@@ -701,11 +803,12 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		return "", fmt.Errorf("failed to get prompt from database: %w", err)
 	}
 
-	var summary string
+	var rawSummary string
+	var meetingTitle string
 
 	if uiCfg.UseLocalAI {
 		// Use local AI (llama.cpp) - load from local.json
-		summary, err = a.summariseWithLocalAI(transcript, prompt)
+		rawSummary, err = a.summariseWithLocalAI(transcript, structuredPrompt)
 		if err != nil {
 			return "", fmt.Errorf("local AI summarisation failed: %w", err)
 		}
@@ -738,11 +841,11 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 			Messages: []chatMessage{
 				{
 					Role:    "system",
-					Content: prompt,
+					Content: structuredPrompt,
 				},
 				{
 					Role:    "user",
-					Content: string(transcript),
+					Content: transcript,
 				},
 			},
 			MaxTokens:   maxTokens,
@@ -750,10 +853,25 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		}
 
 		// Make the API request
-		summary, err = a.makeOpenAIRequest(cfg.BaseURL, cfg.APIKey, request)
+		rawSummary, err = a.makeOpenAIRequest(cfg.BaseURL, cfg.APIKey, request)
 		if err != nil {
 			return "", fmt.Errorf("API request failed: %w", err)
 		}
+	}
+
+	payload, parseErr := parseSummaryPayload(rawSummary)
+	summaryContent := strings.TrimSpace(rawSummary)
+	if parseErr != nil {
+		fmt.Printf("Warning: failed to parse structured summary payload: %v\n", parseErr)
+	} else {
+		if trimmed := strings.TrimSpace(payload.SummaryMarkdown); trimmed != "" {
+			summaryContent = payload.SummaryMarkdown
+		}
+		meetingTitle = strings.TrimSpace(payload.MeetingTitle)
+	}
+
+	if strings.TrimSpace(summaryContent) == "" {
+		return "", errors.New("summary content is empty")
 	}
 
 	// If we have a file path, we need to find the recording by filename
@@ -780,6 +898,37 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		}
 	}
 
+	if dbRecording != nil {
+		defaultDisplay := buildRecordingDisplayName("", dbRecording.RecordedAt)
+		desiredDisplay := buildRecordingDisplayName(meetingTitle, dbRecording.RecordedAt)
+		currentDisplay := ""
+		if dbRecording.DisplayName != nil {
+			currentDisplay = strings.TrimSpace(*dbRecording.DisplayName)
+		}
+		filenameDisplay := strings.TrimSpace(dbRecording.Filename)
+
+		shouldUpdate := false
+		if strings.TrimSpace(meetingTitle) == "" {
+			if currentDisplay == "" {
+				desiredDisplay = defaultDisplay
+				shouldUpdate = true
+			}
+		} else {
+			if currentDisplay == "" || currentDisplay == defaultDisplay || currentDisplay == filenameDisplay {
+				if desiredDisplay != currentDisplay {
+					shouldUpdate = true
+				}
+			}
+		}
+
+		if shouldUpdate {
+			dbRecording.DisplayName = &desiredDisplay
+			if err := a.database.UpdateRecording(dbRecording); err != nil {
+				fmt.Printf("Warning: failed to update recording display name: %v\n", err)
+			}
+		}
+	}
+
 	// Determine model used and endpoint
 	modelUsed := "unknown"
 	var apiEndpoint *string
@@ -803,7 +952,7 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 	// Create summary in database
 	dbSummary := &db.Summary{
 		TranscriptID:   dbTranscript.ID,
-		Content:        summary,
+		Content:        summaryContent,
 		SummaryType:    dbPrompt.DisplayName,
 		ModelUsed:      modelUsed,
 		PromptUsed:     prompt,
@@ -834,12 +983,12 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 			outputPath = filepath.Join(outDir, fmt.Sprintf("%s_summary.txt", txtPathOrID))
 		}
 
-		if err := os.WriteFile(outputPath, []byte(summary), 0644); err != nil {
+		if err := os.WriteFile(outputPath, []byte(summaryContent), 0644); err != nil {
 			return "", fmt.Errorf("failed to write summary: %w", err)
 		}
 	}
 
-	return fmt.Sprintf("Summary saved to database (ID: %d)\n\n--- Summary ---\n%s", dbSummary.ID, summary), nil
+	return fmt.Sprintf("Summary saved to database (ID: %d)\n\n--- Summary ---\n%s", dbSummary.ID, summaryContent), nil
 }
 
 // SummariseTranscript summarises a transcript selected from the database by ID
@@ -1079,6 +1228,7 @@ func (a *App) startRecordingAdvancedInternal(withMic bool, dictation bool, isToo
 
 	startTime := time.Now()
 	ts := startTime.Format("20060102_150405")
+	defaultDisplayName := buildRecordingDisplayName("", &startTime)
 
 	// Create a file for recording
 	wavPath := filepath.Join(outputDir, ts+".wav")
@@ -1099,6 +1249,7 @@ func (a *App) startRecordingAdvancedInternal(withMic bool, dictation bool, isToo
 
 		dbRecording = &db.Recording{
 			Filename:       ts + ".wav",
+			DisplayName:    &defaultDisplayName,
 			FilePath:       wavPath,
 			FileSize:       0, // Will be updated when recording stops
 			SampleRate:     int(sampleRate),
@@ -1349,48 +1500,6 @@ func (a *App) CleanupTempFiles() error {
 	}
 
 	return nil
-}
-
-// GetWavPathForRecording returns the WAV file path for a recording ID
-// If the file doesn't exist, it creates a temporary one from database data
-func (a *App) GetWavPathForRecording(recordingID int) (string, error) {
-	if a.database == nil {
-		return "", errors.New("database not initialized")
-	}
-
-	recording, err := a.database.GetRecording(recordingID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get recording: %w", err)
-	}
-
-	cfg := a.settings.Get()
-	outDir := cfg.OutDir
-	if outDir == "" {
-		outDir = "./out"
-	}
-
-	wavPath := filepath.Join(outDir, recording.Filename)
-
-	// Check if file exists
-	if _, err := os.Stat(wavPath); err == nil {
-		// File exists, return the path
-		return wavPath, nil
-	}
-
-	// File doesn't exist, create it from database data
-	if recording.AudioData == nil {
-		return "", fmt.Errorf("no audio data available for recording %d", recordingID)
-	}
-
-	if err := os.MkdirAll(outDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	if err := os.WriteFile(wavPath, recording.AudioData, 0644); err != nil {
-		return "", fmt.Errorf("failed to create WAV file: %w", err)
-	}
-
-	return wavPath, nil
 }
 
 // DeleteRecording deletes a recording and all associated transcripts and summaries
@@ -1757,42 +1866,6 @@ func (a *App) isLlamaServerRunning() bool {
 	return resp.StatusCode == 200
 }
 
-// GetAudioDataURL returns a base64-encoded data URL for the given WAV file or recording ID
-func (a *App) GetAudioDataURL(wavPathOrID string) (string, error) {
-	var audioData []byte
-
-	// Check if it's a file path (for backwards compatibility)
-	if _, err := os.Stat(wavPathOrID); err == nil {
-		// It's a file path, read from file
-		audioData, err = os.ReadFile(wavPathOrID)
-		if err != nil {
-			return "", fmt.Errorf("failed to read audio file: %v", err)
-		}
-	} else {
-		// Try to parse as recording ID
-		var recordingID int
-		if _, parseErr := fmt.Sscanf(wavPathOrID, "%d", &recordingID); parseErr == nil {
-			// It's a recording ID, get from database
-			recording, dbErr := a.database.GetRecording(recordingID)
-			if dbErr != nil {
-				return "", fmt.Errorf("failed to get recording from database: %v", dbErr)
-			}
-			if recording.AudioData == nil {
-				return "", fmt.Errorf("recording has no audio data stored in database")
-			}
-			audioData = recording.AudioData
-		} else {
-			return "", fmt.Errorf("invalid file path or recording ID: %s", wavPathOrID)
-		}
-	}
-
-	// Encode as base64
-	base64Data := base64.StdEncoding.EncodeToString(audioData)
-
-	// Return as data URL
-	return "data:audio/wav;base64," + base64Data, nil
-}
-
 // UpdateRecording updates a recording in the database
 func (a *App) UpdateRecording(recordingID int, updates map[string]interface{}) error {
 	// Get the current recording
@@ -1801,7 +1874,22 @@ func (a *App) UpdateRecording(recordingID int, updates map[string]interface{}) e
 		return fmt.Errorf("failed to get recording: %w", err)
 	}
 
-	// Apply updates - only date/time for now
+	// Apply updates for display name and date/time
+	if value, exists := updates["display_name"]; exists {
+		switch v := value.(type) {
+		case string:
+			trimmed := strings.TrimSpace(v)
+			if trimmed == "" {
+				recording.DisplayName = nil
+			} else {
+				cleaned := strings.Join(strings.Fields(trimmed), " ")
+				recording.DisplayName = &cleaned
+			}
+		case nil:
+			recording.DisplayName = nil
+		}
+	}
+
 	if recordedAt, ok := updates["recorded_at"].(string); ok {
 		if t, err := time.Parse("2006-01-02T15:04:05", recordedAt); err == nil {
 			recording.RecordedAt = &t
@@ -1827,4 +1915,25 @@ func (a *App) UpdateSummary(summaryID int, updates map[string]interface{}) error
 
 	// Update in database
 	return a.database.UpdateSummary(summary)
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		return fmt.Errorf("failed to copy file: %w", err)
+	}
+
+	return destFile.Sync()
 }

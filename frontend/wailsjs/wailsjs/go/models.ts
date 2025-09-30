@@ -20,6 +20,8 @@ export namespace db {
 	    notes?: string;
 	    tags?: string;
 	    audio_data?: number[];
+	    error_message?: string;
+	    retry_file_path?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Recording(source);
@@ -44,6 +46,61 @@ export namespace db {
 	        this.notes = source["notes"];
 	        this.tags = source["tags"];
 	        this.audio_data = source["audio_data"];
+	        this.error_message = source["error_message"];
+	        this.retry_file_path = source["retry_file_path"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Summary {
+	    id: number;
+	    transcript_id: number;
+	    content: string;
+	    summary_type: string;
+	    model_used: string;
+	    temperature?: number;
+	    prompt_used: string;
+	    prompt_id?: number;
+	    processing_time_seconds?: number;
+	    api_endpoint?: string;
+	    local_model_path?: string;
+	    // Go type: time
+	    created_at: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new Summary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.transcript_id = source["transcript_id"];
+	        this.content = source["content"];
+	        this.summary_type = source["summary_type"];
+	        this.model_used = source["model_used"];
+	        this.temperature = source["temperature"];
+	        this.prompt_used = source["prompt_used"];
+	        this.prompt_id = source["prompt_id"];
+	        this.processing_time_seconds = source["processing_time_seconds"];
+	        this.api_endpoint = source["api_endpoint"];
+	        this.local_model_path = source["local_model_path"];
+	        this.created_at = this.convertValues(source["created_at"], null);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -84,18 +141,15 @@ export namespace db {
 	    notes?: string;
 	    tags?: string;
 	    audio_data?: number[];
+	    error_message?: string;
+	    retry_file_path?: string;
 	    transcript_id?: number;
 	    transcript_content?: string;
 	    transcript_model?: string;
 	    confidence_score?: number;
 	    // Go type: time
 	    transcribed_at?: any;
-	    summary_id?: number;
-	    summary_content?: string;
-	    summary_type?: string;
-	    summary_model?: string;
-	    // Go type: time
-	    summarized_at?: any;
+	    summaries?: Summary[];
 	
 	    static createFrom(source: any = {}) {
 	        return new RecordingWithDetails(source);
@@ -120,16 +174,14 @@ export namespace db {
 	        this.notes = source["notes"];
 	        this.tags = source["tags"];
 	        this.audio_data = source["audio_data"];
+	        this.error_message = source["error_message"];
+	        this.retry_file_path = source["retry_file_path"];
 	        this.transcript_id = source["transcript_id"];
 	        this.transcript_content = source["transcript_content"];
 	        this.transcript_model = source["transcript_model"];
 	        this.confidence_score = source["confidence_score"];
 	        this.transcribed_at = this.convertValues(source["transcribed_at"], null);
-	        this.summary_id = source["summary_id"];
-	        this.summary_content = source["summary_content"];
-	        this.summary_type = source["summary_type"];
-	        this.summary_model = source["summary_model"];
-	        this.summarized_at = this.convertValues(source["summarized_at"], null);
+	        this.summaries = this.convertValues(source["summaries"], Summary);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -206,59 +258,7 @@ export namespace db {
 		    return a;
 		}
 	}
-	export class Summary {
-	    id: number;
-	    transcript_id: number;
-	    content: string;
-	    summary_type: string;
-	    model_used: string;
-	    temperature?: number;
-	    prompt_used: string;
-	    prompt_id?: number;
-	    processing_time_seconds?: number;
-	    api_endpoint?: string;
-	    local_model_path?: string;
-	    // Go type: time
-	    created_at: any;
 	
-	    static createFrom(source: any = {}) {
-	        return new Summary(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.transcript_id = source["transcript_id"];
-	        this.content = source["content"];
-	        this.summary_type = source["summary_type"];
-	        this.model_used = source["model_used"];
-	        this.temperature = source["temperature"];
-	        this.prompt_used = source["prompt_used"];
-	        this.prompt_id = source["prompt_id"];
-	        this.processing_time_seconds = source["processing_time_seconds"];
-	        this.api_endpoint = source["api_endpoint"];
-	        this.local_model_path = source["local_model_path"];
-	        this.created_at = this.convertValues(source["created_at"], null);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class Transcript {
 	    id: number;
 	    recording_id: number;

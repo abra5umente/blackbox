@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wails build:*)",
+      "Read(//c/Users/alexa/Documents/PowerShell/**)",
+      "Read(//c/Users/alexa/Documents/WindowsPowerShell/**)",
+      "Read(//c/Users/alexa/AppData/Local/Programs/oh-my-posh/themes/**)"
+    ]
+  },
+  "spinnerTipsEnabled": true
+}

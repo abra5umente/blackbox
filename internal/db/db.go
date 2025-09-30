@@ -406,6 +406,8 @@ type Recording struct {
 	Notes           *string    `json:"notes,omitempty"`
 	Tags            *string    `json:"tags,omitempty"`
 	AudioData       []byte     `json:"audio_data,omitempty"` // BLOB for storing actual audio data
+	ErrorMessage    *string    `json:"error_message,omitempty"` // Error message for failed transcriptions
+	RetryFilePath   *string    `json:"retry_file_path,omitempty"` // Path to WAV file in retry/ folder
 }
 
 // Transcript represents a transcript entity
@@ -463,7 +465,7 @@ type Tag struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// RecordingWithDetails represents a recording with its transcript and summary
+// RecordingWithDetails represents a recording with its transcript and summaries
 type RecordingWithDetails struct {
 	Recording
 	TranscriptID      *int       `json:"transcript_id,omitempty"`
@@ -471,11 +473,7 @@ type RecordingWithDetails struct {
 	TranscriptModel   *string    `json:"transcript_model,omitempty"`
 	ConfidenceScore   *float64   `json:"confidence_score,omitempty"`
 	TranscribedAt     *time.Time `json:"transcribed_at,omitempty"`
-	SummaryID         *int       `json:"summary_id,omitempty"`
-	SummaryContent    *string    `json:"summary_content,omitempty"`
-	SummaryType       *string    `json:"summary_type,omitempty"`
-	SummaryModel      *string    `json:"summary_model,omitempty"`
-	SummarizedAt      *time.Time `json:"summarized_at,omitempty"`
+	Summaries         []*Summary `json:"summaries,omitempty"`
 }
 
 // RecordingWithTranscript represents a recording with its transcript for summarisation

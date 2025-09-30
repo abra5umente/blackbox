@@ -14,8 +14,6 @@ export function DeleteSummary(arg1:number):Promise<void>;
 
 export function DeleteTranscript(arg1:number):Promise<void>;
 
-export function GetAudioDataURL(arg1:string):Promise<string>;
-
 export function GetAvailablePrompts():Promise<Array<ui.PromptConfig>>;
 
 export function GetPromptConfig(arg1:string):Promise<ui.PromptConfig>;
@@ -39,8 +37,6 @@ export function GetSummariesByTranscriptID(arg1:number):Promise<Array<db.Summary
 export function GetTranscriptContent(arg1:number):Promise<string>;
 
 export function GetTranscriptsByRecordingID(arg1:number):Promise<Array<db.Transcript>>;
-
-export function GetWavPathForRecording(arg1:number):Promise<string>;
 
 export function IsRecording():Promise<boolean>;
 

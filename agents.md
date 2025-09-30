@@ -337,9 +337,14 @@ wruntime.EventsEmit(a.uiCtx, "audioData", map[string]interface{}{
 {
   "base_url": "https://api.openai.com/v1",
   "api_key": "your_openai_api_key_here",
-  "model": "gpt-4o-mini"
+  "model": "gpt-5-mini",
+  "temperature": 0.2,
+  "max_tokens": 2048
 }
 ```
+
+- `temperature` and `max_tokens` are surfaced in the Settings tab and applied to remote summarisation calls.
+- UI defaults target OpenAI's latest GPT‑5 mini deployment; adjust the values as needed for other providers.
 
 ### Local AI Config (`./configs/local.json`)
 ```json

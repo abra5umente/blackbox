@@ -22,10 +22,6 @@ export function DeleteTranscript(arg1) {
   return window['go']['ui']['App']['DeleteTranscript'](arg1);
 }
 
-export function GetAudioDataURL(arg1) {
-  return window['go']['ui']['App']['GetAudioDataURL'](arg1);
-}
-
 export function GetAvailablePrompts() {
   return window['go']['ui']['App']['GetAvailablePrompts']();
 }
@@ -72,10 +68,6 @@ export function GetTranscriptContent(arg1) {
 
 export function GetTranscriptsByRecordingID(arg1) {
   return window['go']['ui']['App']['GetTranscriptsByRecordingID'](arg1);
-}
-
-export function GetWavPathForRecording(arg1) {
-  return window['go']['ui']['App']['GetWavPathForRecording'](arg1);
 }
 
 export function IsRecording() {
