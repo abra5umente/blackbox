@@ -160,7 +160,12 @@
       <!-- Audio Player for recorded WAV -->
       <!-- Formatted Output for Transcript/Summary -->
       <div id="formattedOutputSection" class="my-4 hidden">
-        <div class="text-gray-300 text-sm mb-2">Formatted Output</div>
+        <div class="flex justify-between items-center mb-2">
+          <div class="text-gray-300 text-sm">Formatted Output</div>
+          <button id="btnCopySummary" class="bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded transition-colors">
+            Copy Summary
+          </button>
+        </div>
         <div id="formattedOutput" class="bg-gray-800 border border-gray-700 rounded-md p-4 max-h-96 overflow-auto prose prose-invert max-w-none">
           <!-- Formatted markdown content will be rendered here -->
         </div>
@@ -835,9 +840,10 @@
         autoSpectrum.stopRecording();
 
         try {
+          // Note: App().Transcribe() is deprecated. Use App().TranscribeFile(path) or App().TranscribeRecording(id) for new code
           const txt = await App().Transcribe(p);
           document.getElementById('autoLog').textContent = 'Saved: ' + p + '\nTranscribing...\nTranscribed: ' + txt + '\nSummarising...';
-          
+
           // Update settings with current checkbox state
           const useLocalAI = document.getElementById('autoLocalAI').checked;
           const currentSettings = await App().GetSettings();
@@ -846,10 +852,10 @@
             use_local_ai: useLocalAI
           };
           await App().SaveSettings(JSON.stringify(updatedSettings));
-          
+
           const msg = await App().Summarise(p);
           document.getElementById('autoLog').textContent = 'Saved: ' + p + '\nTranscribing...\nTranscribed: ' + txt + '\nSummarising...\nSummary written to: ' + txt.replace('.txt', '_summary.txt');
-          
+
           // Render formatted output (only the summary content, not system messages)
           renderMarkdown(msg, 'formattedOutput');
           document.getElementById('formattedOutputSection').classList.remove('hidden');
@@ -857,6 +863,32 @@
           document.getElementById('autoLog').textContent += '\nError: ' + e;
         }
         document.getElementById('btnAutoStart').disabled = false;
+      };
+
+      // Copy summary button
+      document.getElementById('btnCopySummary').onclick = async () => {
+        const summaryElement = document.getElementById('formattedOutput');
+        const summaryText = summaryElement.innerText || summaryElement.textContent;
+
+        try {
+          await navigator.clipboard.writeText(summaryText);
+
+          // Visual feedback - change button text temporarily
+          const btn = document.getElementById('btnCopySummary');
+          const originalText = btn.textContent;
+          btn.textContent = 'Copied!';
+          btn.classList.add('bg-green-500', 'hover:bg-green-600');
+          btn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+
+          setTimeout(() => {
+            btn.textContent = originalText;
+            btn.classList.remove('bg-green-500', 'hover:bg-green-600');
+            btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+          }, 2000);
+        } catch (e) {
+          console.error('Failed to copy summary:', e);
+          alert('Failed to copy summary to clipboard');
+        }
       };
 
 
@@ -934,7 +966,8 @@
           if (!toolsPickedWav) {
             throw new Error('No WAV file selected');
           }
-          
+
+          // Note: App().Transcribe() is deprecated. Use App().TranscribeFile(path) or App().TranscribeRecording(id) for new code
           const txt = await App().Transcribe(toolsPickedWav);
           document.getElementById('toolsTranscribeLog').textContent = 'Transcribed: ' + txt;
 

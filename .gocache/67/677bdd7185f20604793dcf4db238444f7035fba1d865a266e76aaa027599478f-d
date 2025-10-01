@@ -1,0 +1,16 @@
+# test log
+stat C:\Users\alexa\AppData\Local\Temp\TestNewSettingsStoreLoadsDefaultsWhenMissing933063865\001\ui.json
+stat C:\Users\alexa\AppData\Local\Temp\TestNewSettingsStoreLoadsDefaultsWhenMissing933063865\001
+stat C:\Users\alexa\AppData\Local\Temp\TestNewSettingsStoreLoadsDefaultsWhenMissing933063865
+open C:\Users\alexa\AppData\Local\Temp\TestNewSettingsStoreLoadsDefaultsWhenMissing933063865
+stat C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275\001\ui.json
+stat C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275\001
+stat C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275\001
+open C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275\001\ui.json
+open C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275\001\ui.json
+stat C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275\001\ui.json
+open C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275\001\ui.json
+stat C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275
+open C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275
+stat C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275\001
+open C:\Users\alexa\AppData\Local\Temp\TestSettingsStoreSaveAndReload2050742275\001

@@ -83,9 +83,9 @@ func (db *DB) GetProcessingMetadata(id int) (*ProcessingMetadata, error) {
 		return nil, fmt.Errorf("failed to get processing metadata: %w", err)
 	}
 
-	metadata.RecordingID = intPtr(int(recordingID.Int64))
-	metadata.TranscriptID = intPtr(int(transcriptID.Int64))
-	metadata.SummaryID = intPtr(int(summaryID.Int64))
+	metadata.RecordingID = intPtrFromNull(recordingID)
+	metadata.TranscriptID = intPtrFromNull(transcriptID)
+	metadata.SummaryID = intPtrFromNull(summaryID)
 	metadata.ModelUsed = stringPtr(modelUsed)
 	metadata.Parameters = stringPtr(parameters)
 	metadata.EndTime = timePtr(endTime)

@@ -1,0 +1,14 @@
+# test log
+getenv TMPDIR
+stat /tmp/TestNewSettingsStoreLoadsDefaultsWhenMissing3026707466/001/ui.json
+stat /tmp/TestNewSettingsStoreLoadsDefaultsWhenMissing3026707466/001
+open /tmp
+getenv TMPDIR
+stat /tmp/TestSettingsStoreSaveAndReload2503843457/001/ui.json
+stat /tmp/TestSettingsStoreSaveAndReload2503843457/001
+stat /tmp/TestSettingsStoreSaveAndReload2503843457/001
+open /tmp/TestSettingsStoreSaveAndReload2503843457/001/ui.json
+open /tmp/TestSettingsStoreSaveAndReload2503843457/001/ui.json
+stat /tmp/TestSettingsStoreSaveAndReload2503843457/001/ui.json
+open /tmp/TestSettingsStoreSaveAndReload2503843457/001/ui.json
+open /tmp

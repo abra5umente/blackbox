@@ -1,0 +1,7 @@
+# test log
+getenv TMPDIR
+open /tmp
+getenv TMPDIR
+open /tmp/TestWriterWritesHeaderAndData107641611/001/out.wav
+open /tmp/TestWriterWritesHeaderAndData107641611/001/out.wav
+open /tmp

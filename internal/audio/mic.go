@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/gen2brain/malgo"
 )
@@ -13,9 +14,10 @@ import (
 // MicRecorder captures default microphone audio (WASAPI capture).
 // It emits raw PCM S16LE frames (interleaved) through a channel.
 type MicRecorder struct {
-	ctx    *malgo.AllocatedContext
-	device *malgo.Device
-	dataCh chan []byte
+	ctx       *malgo.AllocatedContext
+	device    *malgo.Device
+	dataCh    chan []byte
+	onceClose sync.Once
 }
 
 func NewMicRecorder(bufferCallbacks int) (*MicRecorder, error) {
@@ -68,16 +70,18 @@ func (r *MicRecorder) Start(sampleRate uint32, channels uint32) error {
 func (r *MicRecorder) Data() <-chan []byte { return r.dataCh }
 
 func (r *MicRecorder) Stop() {
-	if r.device != nil {
-		_ = r.device.Stop()
-		r.device.Uninit()
-		r.device = nil
-	}
-	if r.ctx != nil {
-		r.ctx.Uninit()
-		r.ctx = nil
-	}
-	close(r.dataCh)
+	r.onceClose.Do(func() {
+		if r.device != nil {
+			_ = r.device.Stop()
+			r.device.Uninit()
+			r.device = nil
+		}
+		if r.ctx != nil {
+			r.ctx.Uninit()
+			r.ctx = nil
+		}
+		close(r.dataCh)
+	})
 }
 
 func (r *MicRecorder) RunUntil(ctx context.Context, sink func([]byte) error) error {

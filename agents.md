@@ -357,6 +357,13 @@ wruntime.EventsEmit(a.uiCtx, "audioData", map[string]interface{}{
 
 ## Development Patterns
 
+### Testing
+
+- **Go Unit Tests**: Run `./run-tests.ps1` in PowerShell (preferred on Windows) or `./run-tests.sh` in Git Bash/WSL/macOS/Linux. Both commands set `GOCACHE` and `BLACKBOX_MIGRATIONS_DIR` before running `go test ./...` so migrations load correctly.
+- **Windows Audio Builds**: Non-Windows builds use `internal/audio/audio_stub.go` to satisfy imports; real audio capture only works on Windows.
+- **HideWindow Helpers**: Windows-only process window hiding lives in `internal/execx/sys_windows.go` and `internal/ui/sys_windows.go`; non-Windows builds use no-op counterparts.
+- **Extending Tests**: Place additional Go tests alongside source files (e.g., `*_test.go`). Favour fast, deterministic tests by mocking external binaries and filesystem usage.
+
 ### 1. Audio Processing
 - **Buffering**: Use buffered channels for audio data
 - **Mixing**: Sample-wise averaging with clipping prevention
@@ -540,6 +547,7 @@ cd frontend && npm run tailwind:build
 9. **Database Errors**: Check database file permissions and schema migrations
 10. **Search Not Working**: Verify FTS5 extension is available in SQLite
 11. **Prompt Loading Fails**: Check prompt JSON file syntax and structure
+12. **"Not found: time.Time" warnings during build**: These are harmless informational messages from Wails bindings generation, not errors. The build completes successfully and TypeScript bindings use `any` for Go's `time.Time` fields, which is correct behavior.
 
 ### Debug Steps
 1. Check console output for error messages

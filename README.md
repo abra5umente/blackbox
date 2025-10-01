@@ -36,6 +36,18 @@ cp .\build\bin\blackbox-gui.exe .\blackbox-gui.exe
 
 
 
+## Running Tests
+
+Make sure Go is installed and available on your PATH, then run one of:
+```powershell
+# PowerShell (Windows)
+./run-tests.ps1
+```
+```bash
+# Git Bash / WSL / Linux / macOS
+./run-tests.sh
+```
+
 ## Audio Format
 
 - **Format**: PCM S16LE (16-bit signed little-endian)
@@ -264,6 +276,15 @@ Blackbox includes a comprehensive SQLite database for managing all recordings, t
 - [ ] Advanced search and filtering capabilities
 - [ ] Export functionality (PDF, DOCX, etc.)
 - [ ] Cloud storage integration
+
+## Recent Updates
+
+### October 2025
+- **Structured logging** with `log/slog` (JSON format) for better debugging
+- **Type-safe transcription API**: `TranscribeRecording(id)` and `TranscribeFile(path)` methods
+- **Database optimization**: Removed `audio_data` column (migration 007) - audio never stored in DB
+- **Improved error tracking**: File deletion failures and transcription errors properly logged
+- **Enhanced validation**: Input validation on all public API methods
 
 ## License
 

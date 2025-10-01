@@ -123,27 +123,27 @@ func (w *Writer) Close() error {
 		return nil
 	}
 	w.closed = true
+
+	// Ensure file is closed regardless of errors
+	defer w.file.Close()
+
 	if err := w.buf.Flush(); err != nil {
-		w.file.Close()
 		return err
 	}
 
 	// Update ChunkSize and Subchunk2Size
 	if _, err := w.file.Seek(4, io.SeekStart); err != nil {
-		w.file.Close()
 		return err
 	}
 	if err := binary.Write(w.file, binary.LittleEndian, uint32(36)+w.dataSize); err != nil {
-		w.file.Close()
 		return err
 	}
 	if _, err := w.file.Seek(40, io.SeekStart); err != nil {
-		w.file.Close()
 		return err
 	}
 	if err := binary.Write(w.file, binary.LittleEndian, w.dataSize); err != nil {
-		w.file.Close()
 		return err
 	}
-	return w.file.Close()
+
+	return nil
 }

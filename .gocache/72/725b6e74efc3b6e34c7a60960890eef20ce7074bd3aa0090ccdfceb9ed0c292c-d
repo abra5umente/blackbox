@@ -1,0 +1,5 @@
+./app.go
+./settings.go
+./sys_windows.go
+./app_test.go
+./settings_test.go

@@ -1,0 +1,9 @@
+# test log
+stat C:\Users\alexa\AppData\Local\Temp\TestNewWriterRejectsUnsupportedBitDepth1630726329
+open C:\Users\alexa\AppData\Local\Temp\TestNewWriterRejectsUnsupportedBitDepth1630726329
+open C:\Users\alexa\AppData\Local\Temp\TestWriterWritesHeaderAndData4266572143\001\out.wav
+open C:\Users\alexa\AppData\Local\Temp\TestWriterWritesHeaderAndData4266572143\001\out.wav
+stat C:\Users\alexa\AppData\Local\Temp\TestWriterWritesHeaderAndData4266572143
+open C:\Users\alexa\AppData\Local\Temp\TestWriterWritesHeaderAndData4266572143
+stat C:\Users\alexa\AppData\Local\Temp\TestWriterWritesHeaderAndData4266572143\001
+open C:\Users\alexa\AppData\Local\Temp\TestWriterWritesHeaderAndData4266572143\001

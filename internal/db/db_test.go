@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +11,8 @@ import (
 )
 
 func TestDatabaseIntegration(t *testing.T) {
+	setMigrationsEnv(t)
+
 	// Create a temporary database file
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
@@ -97,14 +100,20 @@ func TestDatabaseIntegration(t *testing.T) {
 		t.Fatalf("Expected transcript content %s, got %v", transcript.Content, details.TranscriptContent)
 	}
 
-	if details.SummaryContent == nil || *details.SummaryContent != summary.Content {
-		t.Fatalf("Expected summary content %s, got %v", summary.Content, details.SummaryContent)
+	if len(details.Summaries) == 0 {
+		t.Fatal("expected at least one summary")
+	}
+
+	if details.Summaries[0].Content != summary.Content {
+		t.Fatalf("Expected summary content %s, got %s", summary.Content, details.Summaries[0].Content)
 	}
 
 	t.Logf("Database integration test passed!")
 }
 
 func TestSearchTranscripts(t *testing.T) {
+	setMigrationsEnv(t)
+
 	// Create a temporary database file
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
@@ -204,4 +213,16 @@ func contains(s, substr string) bool {
 		(s[len(s)-len(substr):] == substr ||
 			s[:len(substr)] == substr ||
 			strings.Contains(s, substr))
+}
+
+func setMigrationsEnv(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working dir: %v", err)
+	}
+	migrationsDir := filepath.Join(wd, "..", "..", "migrations")
+	if _, err := os.Stat(migrationsDir); err != nil {
+		t.Fatalf("migrations dir unavailable: %v", err)
+	}
+	t.Setenv("BLACKBOX_MIGRATIONS_DIR", migrationsDir)
 }

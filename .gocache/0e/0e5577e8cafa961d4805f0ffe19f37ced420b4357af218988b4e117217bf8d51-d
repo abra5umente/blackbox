@@ -1,0 +1,10 @@
+./constants.go
+./enumerations.go
+_cgo_gotypes.go
+context.cgo1.go
+device.cgo1.go
+device_config.cgo1.go
+device_info.cgo1.go
+errors.cgo1.go
+miniaudio.cgo1.go
+_cgo_import.go

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -14,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"blackbox/internal/audio"
@@ -24,6 +24,17 @@ import (
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+var logger *slog.Logger
+
+func init() {
+	// Initialize structured logger with JSON format for easier parsing
+	// You can configure this to write to a file or use different log levels
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	logger = slog.New(handler)
+}
 
 // PromptConfig represents a summarisation prompt configuration
 type PromptConfig struct {
@@ -69,8 +80,9 @@ type App struct {
 	wavPath     string
 
 	// Llama server management
-	llamaServer *exec.Cmd
-	llamaMu     sync.Mutex
+	llamaServer    *exec.Cmd
+	llamaServerLog *os.File
+	llamaMu        sync.Mutex
 
 	// Prompt management
 	selectedPrompt string
@@ -104,7 +116,7 @@ func NewApp(settingsPath string) (*App, error) {
 	// Clean up old temporary files on startup
 	go func() {
 		if err := app.CleanupTempFiles(); err != nil {
-			fmt.Printf("Warning: failed to cleanup temporary files: %v\n", err)
+			logger.Warn("failed to cleanup temporary files on startup", "error", err)
 		}
 	}()
 
@@ -154,18 +166,88 @@ type summaryPayload struct {
 func parseSummaryPayload(raw string) (*summaryPayload, error) {
 	trimmed := stripJSONCodeFence(strings.TrimSpace(raw))
 	var payload summaryPayload
+
+	// Try parsing the whole thing first
 	if err := json.Unmarshal([]byte(trimmed), &payload); err == nil {
 		return &payload, nil
 	}
+
+	// Try extracting JSON object from within text
 	start := strings.Index(trimmed, "{")
 	end := strings.LastIndex(trimmed, "}")
-	if start >= 0 && end >= start {
-		candidate := trimmed[start : end+1]
-		if err := json.Unmarshal([]byte(candidate), &payload); err == nil {
-			return &payload, nil
-		}
+	if start < 0 || end < start {
+		return nil, fmt.Errorf("no JSON object found in response")
 	}
-	return nil, fmt.Errorf("could not parse summarisation payload")
+
+	candidate := trimmed[start : end+1]
+
+	// Try parsing extracted JSON
+	if err2 := json.Unmarshal([]byte(candidate), &payload); err2 == nil {
+		return &payload, nil
+	}
+
+	// Last resort: fix malformed JSON with literal newlines in string values
+	// Some LLMs output literal newlines instead of \n in JSON strings
+	fixed := fixMalformedJSONStrings(candidate)
+	if err3 := json.Unmarshal([]byte(fixed), &payload); err3 == nil {
+		logger.Debug("successfully parsed JSON after fixing malformed string literals")
+		return &payload, nil
+	}
+
+	return nil, fmt.Errorf("JSON parse failed after all attempts")
+}
+
+// fixMalformedJSONStrings attempts to fix JSON with literal newlines in string values
+// by escaping them properly. This handles cases where LLMs output:
+//   {"key": "line1
+//   line2"}
+// and converts to:
+//   {"key": "line1\nline2"}
+func fixMalformedJSONStrings(jsonStr string) string {
+	var result strings.Builder
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(jsonStr); i++ {
+		ch := jsonStr[i]
+
+		if escaped {
+			result.WriteByte(ch)
+			escaped = false
+			continue
+		}
+
+		if ch == '\\' {
+			result.WriteByte(ch)
+			escaped = true
+			continue
+		}
+
+		if ch == '"' {
+			result.WriteByte(ch)
+			inString = !inString
+			continue
+		}
+
+		// If we're inside a string and hit a literal newline, escape it
+		if inString && (ch == '\n' || ch == '\r') {
+			if ch == '\r' && i+1 < len(jsonStr) && jsonStr[i+1] == '\n' {
+				// Windows-style \r\n
+				result.WriteString("\\n")
+				i++ // Skip the \n
+			} else if ch == '\n' {
+				result.WriteString("\\n")
+			} else {
+				// Just \r
+				result.WriteString("\\n")
+			}
+			continue
+		}
+
+		result.WriteByte(ch)
+	}
+
+	return result.String()
 }
 
 func stripJSONCodeFence(s string) string {
@@ -495,7 +577,10 @@ func (a *App) StopRecording() (string, error) {
 			// timeout
 		}
 	}
-	_ = writer.Flush()
+	if err := writer.Flush(); err != nil {
+		logger.Error("failed to flush WAV writer", "error", err)
+		// Continue with Close() to ensure WAV header is written
+	}
 	if err := writer.Close(); err != nil {
 		return wavPath, fmt.Errorf("finalize wav: %w", err)
 	}
@@ -522,8 +607,6 @@ func (a *App) StopRecording() (string, error) {
 
 		dbRecording.FileSize = fileInfo.Size()
 		dbRecording.DurationSeconds = &durationSeconds
-		// Explicitly set AudioData to nil to avoid storing it
-		dbRecording.AudioData = nil
 
 		if err := a.database.UpdateRecording(dbRecording); err != nil {
 			return wavPath, fmt.Errorf("failed to update recording in database: %w", err)
@@ -549,11 +632,79 @@ func (a *App) StopRecording() (string, error) {
 	}
 }
 
+// TranscribeRecording runs whisper.cpp on a recording by ID and returns the transcript content.
+// This is the preferred method for transcribing recordings from the database.
+func (a *App) TranscribeRecording(recordingID int) (string, error) {
+	if recordingID <= 0 {
+		return "", fmt.Errorf("invalid recording ID: %d", recordingID)
+	}
+
+	// Get recording from database
+	dbRecording, err := a.database.GetRecording(recordingID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get recording from database: %w", err)
+	}
+
+	cfg := a.settings.Get()
+	outDir := cfg.OutDir
+	if outDir == "" {
+		outDir = "./out"
+	}
+
+	// Use existing WAV file from disk (audio data is no longer stored in database)
+	wavPath := filepath.Join(outDir, dbRecording.Filename)
+	if _, err := os.Stat(wavPath); err != nil {
+		return "", fmt.Errorf("WAV file not found on disk: %w", err)
+	}
+
+	// Call the internal transcribe implementation
+	return a.transcribeInternal(wavPath, dbRecording)
+}
+
+// TranscribeFile runs whisper.cpp on a WAV file path and returns the transcript content.
+// This method looks up the recording in the database by filename.
+// Use this for ad-hoc transcription of WAV files.
+func (a *App) TranscribeFile(wavPath string) (string, error) {
+	if strings.TrimSpace(wavPath) == "" {
+		return "", errors.New("WAV file path required")
+	}
+
+	// Lookup recording in database by filename
+	filename := filepath.Base(wavPath)
+	dbRecording, err := a.database.GetRecordingByFilename(filename)
+	if err != nil {
+		return "", fmt.Errorf("failed to find recording in database: %w", err)
+	}
+
+	// Call the internal transcribe implementation
+	return a.transcribeInternal(wavPath, dbRecording)
+}
+
 // Transcribe runs whisper.cpp on a recording and returns the transcript content.
-// It accepts either a WAV file path (for backwards compatibility) or a recording ID.
+// Deprecated: Use TranscribeRecording(recordingID int) or TranscribeFile(wavPath string) instead.
+// This method will be removed in a future version.
 func (a *App) Transcribe(wavPathOrID string) (string, error) {
 	if strings.TrimSpace(wavPathOrID) == "" {
 		return "", errors.New("wav path or recording ID required")
+	}
+
+	// Try to parse as recording ID first
+	if recordingID, err := strconv.Atoi(wavPathOrID); err == nil {
+		logger.Info("Transcribe called with numeric ID, forwarding to TranscribeRecording",
+			"recording_id", recordingID)
+		return a.TranscribeRecording(recordingID)
+	}
+
+	// Otherwise treat as file path
+	logger.Info("Transcribe called with file path, forwarding to TranscribeFile",
+		"wav_path", wavPathOrID)
+	return a.TranscribeFile(wavPathOrID)
+}
+
+// transcribeInternal contains the core transcription logic shared by both methods.
+func (a *App) transcribeInternal(wavPath string, dbRecording *db.Recording) (string, error) {
+	if dbRecording == nil {
+		return "", errors.New("database recording is required for transcription")
 	}
 
 	cfg := a.settings.Get()
@@ -568,35 +719,6 @@ func (a *App) Transcribe(wavPathOrID string) (string, error) {
 	whisperBin := getenvDefault("LOOPBACK_NOTES_WHISPER_BIN", "./whisper-bin/whisper-cli.exe")
 	modelDir := getenvDefault("LOOPBACK_NOTES_MODELS", "./models")
 	modelPath := filepath.Join(modelDir, "ggml-base.en.bin")
-
-	var dbRecording *db.Recording
-	var wavPath string
-	var err error
-
-	// Check if it's a numeric ID (recording ID from database)
-	if _, err := strconv.Atoi(wavPathOrID); err == nil {
-		// It's a recording ID
-		recordingID, _ := strconv.Atoi(wavPathOrID)
-		dbRecording, err = a.database.GetRecording(recordingID)
-		if err != nil {
-			return "", fmt.Errorf("failed to get recording from database: %w", err)
-		}
-
-		// Use existing WAV file from disk (audio data is no longer stored in database)
-		wavPath = filepath.Join(outDir, dbRecording.Filename)
-		if _, err := os.Stat(wavPath); err != nil {
-			return "", fmt.Errorf("WAV file not found on disk: %w", err)
-		}
-		// Note: WAV file will be cleaned up after successful transcription or moved to retry/ on failure
-	} else {
-		// It's a file path (backwards compatibility)
-		wavPath = wavPathOrID
-		filename := filepath.Base(wavPath)
-		dbRecording, err = a.database.GetRecordingByFilename(filename)
-		if err != nil {
-			return "", fmt.Errorf("failed to find recording in database: %w", err)
-		}
-	}
 
 	startTime := time.Now()
 
@@ -614,16 +736,16 @@ func (a *App) Transcribe(wavPathOrID string) (string, error) {
 		// Handle failed transcription - move WAV to retry/ and update database
 		if dbRecording != nil {
 			retryDir := filepath.Join(outDir, "retry")
-			if err := os.MkdirAll(retryDir, 0755); err != nil {
-				return "", fmt.Errorf("transcription failed: %v; also failed to create retry directory: %w", err, err)
+			if mkdirErr := os.MkdirAll(retryDir, 0755); mkdirErr != nil {
+				return "", fmt.Errorf("transcription failed: %w; also failed to create retry directory: %w", err, mkdirErr)
 			}
 
 			// Move WAV file to retry directory
 			retryPath := filepath.Join(retryDir, dbRecording.Filename)
-			if err := os.Rename(wavPath, retryPath); err != nil {
+			if renameErr := os.Rename(wavPath, retryPath); renameErr != nil {
 				// If rename fails (cross-device link), try copy + delete
 				if copyErr := copyFile(wavPath, retryPath); copyErr != nil {
-					return "", fmt.Errorf("transcription failed: %v; also failed to move WAV to retry: %w", err, copyErr)
+					return "", fmt.Errorf("transcription failed: %w; also failed to move WAV to retry: %w", err, copyErr)
 				}
 				os.Remove(wavPath)
 			}
@@ -633,7 +755,10 @@ func (a *App) Transcribe(wavPathOrID string) (string, error) {
 			dbRecording.ErrorMessage = &errorMsg
 			dbRecording.RetryFilePath = &retryPath
 			if updateErr := a.database.UpdateRecording(dbRecording); updateErr != nil {
-				fmt.Printf("Warning: failed to update recording with error info: %v\n", updateErr)
+				logger.Error("failed to update recording with error info after transcription failure",
+					"recording_id", dbRecording.ID,
+					"retry_path", retryPath,
+					"error", updateErr)
 			}
 
 			return "", fmt.Errorf("transcription failed and recording saved to %s for retry: %w", retryPath, err)
@@ -697,16 +822,44 @@ func (a *App) Transcribe(wavPathOrID string) (string, error) {
 
 	if err := a.database.CreateProcessingMetadata(processingMetadata); err != nil {
 		// Non-fatal error, just log it
-		fmt.Printf("Warning: failed to save processing metadata: %v\n", err)
+		logger.Warn("failed to save processing metadata",
+			"recording_id", dbRecording.ID,
+			"transcript_id", dbTranscript.ID,
+			"error", err)
 	}
 
 	// Clean up temporary files
 	os.RemoveAll(tempDir)
 
 	// Clean up WAV file after successful transcription
-	if err := os.Remove(wavPath); err != nil {
-		fmt.Printf("Warning: failed to remove WAV file %s: %v\n", wavPath, err)
+	// Check if file exists before attempting deletion to avoid noisy warnings
+	if _, err := os.Stat(wavPath); err == nil {
+		// File exists, attempt to delete it
+		if err := os.Remove(wavPath); err != nil {
+			// Deletion failed - track this in the database for later cleanup
+			errorMsg := fmt.Sprintf("Failed to cleanup WAV file: %v", err)
+			dbRecording.ErrorMessage = &errorMsg
+			if updateErr := a.database.UpdateRecording(dbRecording); updateErr != nil {
+				logger.Error("failed to update recording with cleanup error",
+					"recording_id", dbRecording.ID,
+					"wav_path", wavPath,
+					"cleanup_error", err,
+					"update_error", updateErr)
+			} else {
+				logger.Error("failed to remove WAV file after successful transcription (tracked in database)",
+					"wav_path", wavPath,
+					"recording_id", dbRecording.ID,
+					"error", err)
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		// File stat failed for reasons other than "not exist"
+		logger.Warn("failed to stat WAV file for cleanup",
+			"wav_path", wavPath,
+			"recording_id", dbRecording.ID,
+			"error", err)
 	}
+	// If file doesn't exist, that's fine - it may have already been cleaned up
 
 	// Return the transcript content instead of file path
 	return string(transcriptContent), nil
@@ -743,13 +896,13 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		var dbErr error
 		dbTranscript, dbErr = a.database.GetTranscript(transcriptID)
 		if dbErr != nil {
-			return "", fmt.Errorf("failed to get transcript from database: %v", dbErr)
+			return "", fmt.Errorf("failed to get transcript from database: %w", dbErr)
 		}
 		transcript = dbTranscript.Content
 
 		dbRecording, dbErr = a.database.GetRecording(dbTranscript.RecordingID)
 		if dbErr != nil {
-			return "", fmt.Errorf("failed to get recording from database: %v", dbErr)
+			return "", fmt.Errorf("failed to get recording from database: %w", dbErr)
 		}
 
 		sourceIsTranscript = true
@@ -772,12 +925,12 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 			var dbErr error
 			dbRecording, dbErr = a.database.GetRecording(recordingID)
 			if dbErr != nil {
-				return "", fmt.Errorf("failed to get recording from database: %v", dbErr)
+				return "", fmt.Errorf("failed to get recording from database: %w", dbErr)
 			}
 
 			dbTranscript, dbErr = a.database.GetTranscriptByRecordingID(dbRecording.ID)
 			if dbErr != nil {
-				return "", fmt.Errorf("failed to get transcript from database: %v", dbErr)
+				return "", fmt.Errorf("failed to get transcript from database: %w", dbErr)
 			}
 			transcript = dbTranscript.Content
 		} else {
@@ -862,10 +1015,17 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 	payload, parseErr := parseSummaryPayload(rawSummary)
 	summaryContent := strings.TrimSpace(rawSummary)
 	if parseErr != nil {
-		fmt.Printf("Warning: failed to parse structured summary payload: %v\n", parseErr)
+		logger.Warn("failed to parse structured summary payload, using raw content",
+			"error", parseErr,
+			"raw_summary", rawSummary)
 	} else {
 		if trimmed := strings.TrimSpace(payload.SummaryMarkdown); trimmed != "" {
 			summaryContent = payload.SummaryMarkdown
+			logger.Debug("extracted summary markdown from JSON payload",
+				"meeting_title", payload.MeetingTitle,
+				"markdown_length", len(summaryContent))
+		} else {
+			logger.Warn("JSON parsed but summary_markdown field is empty, using raw content")
 		}
 		meetingTitle = strings.TrimSpace(payload.MeetingTitle)
 	}
@@ -924,7 +1084,10 @@ func (a *App) Summarise(txtPathOrID string) (string, error) {
 		if shouldUpdate {
 			dbRecording.DisplayName = &desiredDisplay
 			if err := a.database.UpdateRecording(dbRecording); err != nil {
-				fmt.Printf("Warning: failed to update recording display name: %v\n", err)
+				logger.Warn("failed to update recording display name after summarization",
+					"recording_id", dbRecording.ID,
+					"desired_display_name", desiredDisplay,
+					"error", err)
 			}
 		}
 	}
@@ -1192,7 +1355,7 @@ func mixS16Mono(loop, mic []byte) []byte {
 // If isToolsMode is true, saves to OutDir/saved for permanent storage (Tools tab).
 // If isToolsMode is false, saves to OutDir for temporary processing (Auto tab).
 func (a *App) StartRecordingAdvanced(withMic bool, dictation bool) (string, error) {
-	fmt.Printf("DEBUG: StartRecordingAdvanced called with withMic=%v, dictation=%v, isToolsMode=false\n", withMic, dictation)
+	logger.Debug("StartRecordingAdvanced called", "withMic", withMic, "dictation", dictation, "isToolsMode", false)
 	return a.startRecordingAdvancedInternal(withMic, dictation, false)
 }
 
@@ -1211,11 +1374,11 @@ func (a *App) startRecordingAdvancedInternal(withMic bool, dictation bool, isToo
 	if isToolsMode {
 		// Tools mode: save to OutDir/saved for permanent storage
 		outputDir = filepath.Join(cfg.OutDir, "saved")
-		fmt.Printf("DEBUG: Tools mode - saving to %s\n", outputDir)
+		logger.Debug("Tools mode - saving to directory", "outputDir", outputDir)
 	} else {
 		// Auto mode: save to OutDir for temporary processing
 		outputDir = cfg.OutDir
-		fmt.Printf("DEBUG: Auto mode - saving to %s\n", outputDir)
+		logger.Debug("Auto mode - saving to directory", "outputDir", outputDir)
 	}
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
@@ -1240,6 +1403,11 @@ func (a *App) startRecordingAdvancedInternal(withMic bool, dictation bool, isToo
 	// Create recording entry in database (only for Auto mode)
 	var dbRecording *db.Recording
 	if !isToolsMode {
+		if a.database == nil {
+			_ = writer.Close()
+			return "", errors.New("database not initialized - cannot save recording in Auto mode")
+		}
+
 		recordingMode := "loopback"
 		if dictation {
 			recordingMode = "dictation"
@@ -1259,13 +1427,14 @@ func (a *App) startRecordingAdvancedInternal(withMic bool, dictation bool, isToo
 			RecordingMode:  recordingMode,
 			WithMicrophone: withMic,
 			RecordedAt:     &startTime, // Store when recording started
-			AudioData:      nil,        // Will be populated when recording stops
 		}
 
 		if err := a.database.CreateRecording(dbRecording); err != nil {
 			_ = writer.Close()
 			return "", fmt.Errorf("failed to create recording in database: %w", err)
 		}
+
+		logger.Info("created recording in database", "id", dbRecording.ID, "filename", dbRecording.Filename)
 	}
 
 	var rec *audio.Recorder
@@ -1492,9 +1661,12 @@ func (a *App) CleanupTempFiles() error {
 			// File exists in database, safe to remove
 			filePath := filepath.Join(outDir, file.Name())
 			if err := os.Remove(filePath); err != nil {
-				fmt.Printf("Warning: failed to remove old temporary file %s: %v\n", filePath, err)
+				logger.Warn("failed to remove old temporary file during cleanup",
+					"file_path", filePath,
+					"error", err)
 			} else {
-				fmt.Printf("Cleaned up old temporary file: %s\n", filePath)
+				logger.Info("cleaned up old temporary file",
+					"file_path", filePath)
 			}
 		}
 	}
@@ -1525,11 +1697,24 @@ func (a *App) DeleteRecording(recordingID int) error {
 	if outDir == "" {
 		outDir = "./out"
 	}
+	// Clean up any remaining WAV file (defensive - should already be deleted after transcription)
 	wavPath := filepath.Join(outDir, recording.Filename)
-	if err := os.Remove(wavPath); err != nil {
-		// Don't fail if file doesn't exist or can't be removed
-		fmt.Printf("Warning: failed to remove WAV file %s: %v\n", wavPath, err)
+	if _, err := os.Stat(wavPath); err == nil {
+		// File exists, attempt to delete it
+		if err := os.Remove(wavPath); err != nil {
+			logger.Warn("failed to remove WAV file during recording deletion",
+				"wav_path", wavPath,
+				"recording_id", recordingID,
+				"error", err)
+		}
+	} else if !os.IsNotExist(err) {
+		// File stat failed for reasons other than "not exist"
+		logger.Warn("failed to stat WAV file during recording deletion",
+			"wav_path", wavPath,
+			"recording_id", recordingID,
+			"error", err)
 	}
+	// If file doesn't exist, that's expected (already cleaned up after transcription)
 
 	return nil
 }
@@ -1731,7 +1916,9 @@ func (a *App) SelectDatabase(dbPath string) error {
 	if err := a.settings.Save(cfg); err != nil {
 		// If settings update fails, we should still keep the new database
 		// but log the error
-		fmt.Printf("Warning: failed to update settings with new database path: %v\n", err)
+		logger.Warn("failed to update settings with new database path",
+			"database_path", dbPath,
+			"error", err)
 	}
 
 	return nil
@@ -1740,12 +1927,43 @@ func (a *App) SelectDatabase(dbPath string) error {
 // startLlamaServer starts the llama-server with the configured parameters
 func (a *App) startLlamaServer() error {
 	a.llamaMu.Lock()
-	defer a.llamaMu.Unlock()
 
-	// Stop existing server if running
+	// Stop existing server if running (without calling stopLlamaServer to avoid deadlock)
 	if a.llamaServer != nil {
-		a.stopLlamaServer()
+		cmd := a.llamaServer
+		logFile := a.llamaServerLog
+		a.llamaServer = nil
+		a.llamaServerLog = nil
+		a.llamaMu.Unlock()
+
+		// Kill outside lock
+		if cmd.Process != nil {
+			cmd.Process.Kill()
+		}
+		// Wait for process to exit (with timeout)
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
+
+		select {
+		case <-done:
+			// Process exited
+		case <-time.After(5 * time.Second):
+			// Force kill if it doesn't exit gracefully
+			if cmd.Process != nil {
+				cmd.Process.Kill()
+			}
+		}
+
+		// Close old log file
+		if logFile != nil {
+			logFile.Close()
+		}
+
+		a.llamaMu.Lock()
 	}
+	defer a.llamaMu.Unlock()
 
 	cfg := a.settings.Get()
 	if cfg.LlamaModel == "" {
@@ -1772,23 +1990,67 @@ func (a *App) startLlamaServer() error {
 		"--api-key", cfg.LlamaAPIKey,
 	}
 
-	cmd := exec.Command(llamaBin, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// Hide CMD window on Windows
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow: true,
+	// Create log file for llama-server output
+	logPath := filepath.Join(cfg.OutDir, "llama-server.log")
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		logger.Warn("failed to create llama-server log file", "error", err)
+		// Continue anyway, just without logging
 	}
 
+	cmd := exec.Command(llamaBin, args...)
+	if logFile != nil {
+		cmd.Stdout = logFile
+		cmd.Stderr = logFile
+		logger.Info("llama-server output will be logged to", "path", logPath)
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+
+	setHideWindow(cmd)
+
 	if err := cmd.Start(); err != nil {
+		if logFile != nil {
+			logFile.Close()
+		}
 		return fmt.Errorf("failed to start llama-server: %w", err)
 	}
 
 	a.llamaServer = cmd
+	a.llamaServerLog = logFile
 
 	// Wait for server to be ready
-	return a.waitForLlamaServer()
+	if err := a.waitForLlamaServer(); err != nil {
+		// Read last few lines of log file for error context
+		if logFile != nil {
+			logFile.Sync()
+			if logContent, readErr := os.ReadFile(logPath); readErr == nil && len(logContent) > 0 {
+				logStr := string(logContent)
+
+				// Get last 500 chars or all content if smaller
+				start := 0
+				if len(logContent) > 500 {
+					start = len(logContent) - 500
+				}
+				lastOutput := logStr[start:]
+
+				logger.Error("llama-server failed to start", "error", err, "last_output", lastOutput)
+
+				// Check for common VRAM/memory issues
+				if strings.Contains(logStr, "failed to allocate") ||
+				   strings.Contains(logStr, "out of memory") ||
+				   strings.Contains(logStr, "ErrorOutOfDeviceMemory") {
+					return fmt.Errorf("%w - VRAM allocation failed. Try reducing context size (currently %d) in Settings or close GPU-intensive apps. Log: %s", err, cfg.LlamaContext, logPath)
+				}
+
+				return fmt.Errorf("%w (check log: %s)", err, logPath)
+			}
+		}
+		return err
+	}
+
+	return nil
 }
 
 // stopLlamaServer stops the running llama-server
@@ -1819,6 +2081,12 @@ func (a *App) stopLlamaServer() {
 
 		a.llamaServer = nil
 	}
+
+	// Close log file if open
+	if a.llamaServerLog != nil {
+		a.llamaServerLog.Close()
+		a.llamaServerLog = nil
+	}
 }
 
 // waitForLlamaServer waits for the llama-server to be responsive
@@ -1843,19 +2111,24 @@ func (a *App) waitForLlamaServer() error {
 // isLlamaServerRunning checks if the llama-server is currently running
 func (a *App) isLlamaServerRunning() bool {
 	a.llamaMu.Lock()
-	defer a.llamaMu.Unlock()
+	cmd := a.llamaServer
+	a.llamaMu.Unlock()
 
-	if a.llamaServer == nil {
+	if cmd == nil {
 		return false
 	}
 
-	// Check if process is still running
-	if a.llamaServer.ProcessState != nil && a.llamaServer.ProcessState.Exited() {
-		a.llamaServer = nil
+	// Check if process is still running (without lock)
+	if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+		a.llamaMu.Lock()
+		if a.llamaServer == cmd {
+			a.llamaServer = nil
+		}
+		a.llamaMu.Unlock()
 		return false
 	}
 
-	// Test if server is responsive
+	// Test if server is responsive (without lock to avoid holding during HTTP call)
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get("http://127.0.0.1:8080/health")
 	if err != nil {
@@ -1868,6 +2141,16 @@ func (a *App) isLlamaServerRunning() bool {
 
 // UpdateRecording updates a recording in the database
 func (a *App) UpdateRecording(recordingID int, updates map[string]interface{}) error {
+	// Validate recording ID
+	if recordingID <= 0 {
+		return fmt.Errorf("invalid recording ID: %d", recordingID)
+	}
+
+	// Validate updates map
+	if len(updates) == 0 {
+		return errors.New("no updates provided")
+	}
+
 	// Get the current recording
 	recording, err := a.database.GetRecording(recordingID)
 	if err != nil {
@@ -1891,8 +2174,24 @@ func (a *App) UpdateRecording(recordingID int, updates map[string]interface{}) e
 	}
 
 	if recordedAt, ok := updates["recorded_at"].(string); ok {
-		if t, err := time.Parse("2006-01-02T15:04:05", recordedAt); err == nil {
+		// Parse time with timezone handling - try multiple formats
+		var t time.Time
+		var parseErr error
+
+		// Try ISO8601 with timezone first
+		t, parseErr = time.Parse(time.RFC3339, recordedAt)
+		if parseErr != nil {
+			// Try without timezone, assume local time
+			t, parseErr = time.ParseInLocation("2006-01-02T15:04:05", recordedAt, time.Local)
+		}
+
+		if parseErr == nil {
 			recording.RecordedAt = &t
+		} else {
+			logger.Warn("failed to parse recorded_at timestamp",
+				"recording_id", recordingID,
+				"timestamp", recordedAt,
+				"error", parseErr)
 		}
 	}
 

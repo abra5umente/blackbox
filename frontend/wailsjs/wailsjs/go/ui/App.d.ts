@@ -78,6 +78,10 @@ export function SummariseTranscript(arg1:number):Promise<string>;
 
 export function Transcribe(arg1:string):Promise<string>;
 
+export function TranscribeFile(arg1:string):Promise<string>;
+
+export function TranscribeRecording(arg1:number):Promise<string>;
+
 export function UpdateRecording(arg1:number,arg2:Record<string, any>):Promise<void>;
 
 export function UpdateSummary(arg1:number,arg2:Record<string, any>):Promise<void>;

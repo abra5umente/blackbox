@@ -150,6 +150,14 @@ export function Transcribe(arg1) {
   return window['go']['ui']['App']['Transcribe'](arg1);
 }
 
+export function TranscribeFile(arg1) {
+  return window['go']['ui']['App']['TranscribeFile'](arg1);
+}
+
+export function TranscribeRecording(arg1) {
+  return window['go']['ui']['App']['TranscribeRecording'](arg1);
+}
+
 export function UpdateRecording(arg1, arg2) {
   return window['go']['ui']['App']['UpdateRecording'](arg1, arg2);
 }

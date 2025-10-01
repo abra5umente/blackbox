@@ -110,7 +110,10 @@ func (db *DB) createMigrationsTable() error {
 
 // loadMigrationsFromFiles loads all migration files from the migrations directory
 func (db *DB) loadMigrationsFromFiles() error {
-	migrationsDir := "migrations"
+	migrationsDir := os.Getenv("BLACKBOX_MIGRATIONS_DIR")
+	if migrationsDir == "" {
+		migrationsDir = "migrations"
+	}
 
 	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
@@ -197,23 +200,20 @@ func (db *DB) applyPendingMigrations() error {
 			if migration.Version == 1 {
 				var count int
 				if err := db.QueryRow("SELECT COUNT(*) FROM recordings").Scan(&count); err == nil {
-					fmt.Printf("DEBUG: Migration %d (%s) already applied and schema is complete\n", migration.Version, migration.Name)
+					// Migration already applied and schema is complete
 					continue
 				} else {
-					fmt.Printf("DEBUG: Migration %d (%s) recorded but schema incomplete, retrying\n", migration.Version, migration.Name)
-					// Delete the migration record so we can try again
+					// Migration recorded but schema incomplete, retrying
 					_, err := db.Exec("DELETE FROM schema_migrations WHERE version = ?", migration.Version)
 					if err != nil {
 						return fmt.Errorf("failed to delete incomplete migration record: %w", err)
 					}
 				}
 			} else {
-				fmt.Printf("DEBUG: Migration %d (%s) already applied\n", migration.Version, migration.Name)
+				// Migration already applied
 				continue
 			}
 		}
-
-		fmt.Printf("DEBUG: Applying migration %d (%s)\n", migration.Version, migration.Name)
 
 		if err := db.applyMigration(migration); err != nil {
 			return fmt.Errorf("failed to apply migration %d: %w", migration.Version, err)
@@ -405,8 +405,7 @@ type Recording struct {
 	RecordedAt      *time.Time `json:"recorded_at,omitempty"`
 	Notes           *string    `json:"notes,omitempty"`
 	Tags            *string    `json:"tags,omitempty"`
-	AudioData       []byte     `json:"audio_data,omitempty"` // BLOB for storing actual audio data
-	ErrorMessage    *string    `json:"error_message,omitempty"` // Error message for failed transcriptions
+	ErrorMessage    *string    `json:"error_message,omitempty"`   // Error message for failed transcriptions
 	RetryFilePath   *string    `json:"retry_file_path,omitempty"` // Path to WAV file in retry/ folder
 }
 

@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -12,9 +13,9 @@ func (db *DB) CreateRecording(recording *Recording) error {
 		INSERT INTO recordings (
 			filename, display_name, file_path, file_size, duration_seconds,
 			sample_rate, channels, bits_per_sample, audio_format,
-			recording_mode, with_microphone, recorded_at, notes, tags, audio_data,
+			recording_mode, with_microphone, recorded_at, notes, tags,
 			error_message, retry_file_path
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := db.Exec(query,
 		recording.Filename,
@@ -31,7 +32,6 @@ func (db *DB) CreateRecording(recording *Recording) error {
 		nullTime(recording.RecordedAt),
 		nullString(recording.Notes),
 		nullString(recording.Tags),
-		recording.AudioData,
 		nullString(recording.ErrorMessage),
 		nullString(recording.RetryFilePath),
 	)
@@ -54,7 +54,7 @@ func (db *DB) GetRecording(id int) (*Recording, error) {
 	query := `
 		SELECT id, filename, display_name, file_path, file_size, duration_seconds,
 		       sample_rate, channels, bits_per_sample, audio_format,
-		       recording_mode, with_microphone, created_at, recorded_at, notes, tags, audio_data,
+		       recording_mode, with_microphone, created_at, recorded_at, notes, tags,
 		       error_message, retry_file_path
 		FROM recordings WHERE id = ?`
 
@@ -80,7 +80,6 @@ func (db *DB) GetRecording(id int) (*Recording, error) {
 		&recordedAt,
 		&notes,
 		&tags,
-		&recording.AudioData,
 		&errorMessage,
 		&retryFilePath,
 	)
@@ -107,7 +106,7 @@ func (db *DB) GetRecordingByFilename(filename string) (*Recording, error) {
 	query := `
 		SELECT id, filename, display_name, file_path, file_size, duration_seconds,
 		       sample_rate, channels, bits_per_sample, audio_format,
-		       recording_mode, with_microphone, created_at, recorded_at, notes, tags, audio_data,
+		       recording_mode, with_microphone, created_at, recorded_at, notes, tags,
 		       error_message, retry_file_path
 		FROM recordings WHERE filename = ?`
 
@@ -133,7 +132,6 @@ func (db *DB) GetRecordingByFilename(filename string) (*Recording, error) {
 		&recordedAt,
 		&notes,
 		&tags,
-		&recording.AudioData,
 		&errorMessage,
 		&retryFilePath,
 	)
@@ -160,7 +158,7 @@ func (db *DB) ListRecordings(limit, offset int, mode, tag *string) ([]*Recording
 	query := `
 		SELECT id, filename, display_name, file_path, file_size, duration_seconds,
 		       sample_rate, channels, bits_per_sample, audio_format,
-		       recording_mode, with_microphone, created_at, recorded_at, notes, tags, audio_data,
+		       recording_mode, with_microphone, created_at, recorded_at, notes, tags,
 		       error_message, retry_file_path
 		FROM recordings WHERE 1=1`
 
@@ -170,8 +168,8 @@ func (db *DB) ListRecordings(limit, offset int, mode, tag *string) ([]*Recording
 		args = append(args, *mode)
 	}
 	if tag != nil {
-		query += " AND tags LIKE ?"
-		args = append(args, "%"+*tag+"%")
+		query += " AND tags LIKE ? ESCAPE '\\'"
+		args = append(args, "%"+escapeLikePattern(*tag)+"%")
 	}
 
 	query += " ORDER BY id DESC"
@@ -215,7 +213,6 @@ func (db *DB) ListRecordings(limit, offset int, mode, tag *string) ([]*Recording
 			&recordedAt,
 			&notes,
 			&tags,
-			&recording.AudioData,
 			&errorMessage,
 			&retryFilePath,
 		)
@@ -246,7 +243,7 @@ func (db *DB) UpdateRecording(recording *Recording) error {
 	query := `
 		UPDATE recordings SET
 			display_name = ?, file_size = ?, duration_seconds = ?,
-			recorded_at = ?, notes = ?, tags = ?, audio_data = ?,
+			recorded_at = ?, notes = ?, tags = ?,
 			recording_mode = ?, with_microphone = ?, sample_rate = ?,
 			channels = ?, bits_per_sample = ?, audio_format = ?,
 			error_message = ?, retry_file_path = ?
@@ -259,7 +256,6 @@ func (db *DB) UpdateRecording(recording *Recording) error {
 		nullTime(recording.RecordedAt),
 		nullString(recording.Notes),
 		nullString(recording.Tags),
-		recording.AudioData,
 		recording.RecordingMode,
 		recording.WithMicrophone,
 		recording.SampleRate,
@@ -311,7 +307,7 @@ func (db *DB) GetRecordingWithDetails(id int) (*RecordingWithDetails, error) {
 		SELECT
 			r.id, r.filename, r.display_name, r.file_path, r.file_size, r.duration_seconds,
 			r.sample_rate, r.channels, r.bits_per_sample, r.audio_format,
-			r.recording_mode, r.with_microphone, r.created_at, r.recorded_at, r.notes, r.tags, r.audio_data,
+			r.recording_mode, r.with_microphone, r.created_at, r.recorded_at, r.notes, r.tags,
 			r.error_message, r.retry_file_path,
 			t.id as transcript_id, t.content as transcript_content, t.model_used as transcript_model,
 			t.confidence_score, t.created_at as transcribed_at
@@ -345,7 +341,6 @@ func (db *DB) GetRecordingWithDetails(id int) (*RecordingWithDetails, error) {
 		&recordedAt,
 		&notes,
 		&tags,
-		&details.AudioData,
 		&errorMessage,
 		&retryFilePath,
 		&transcriptID,
@@ -442,6 +437,14 @@ func intPtrFromNull(ni sql.NullInt64) *int {
 	return nil
 }
 
+// escapeLikePattern escapes special characters in LIKE patterns
+func escapeLikePattern(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "%", "\\%")
+	s = strings.ReplaceAll(s, "_", "\\_")
+	return s
+}
+
 // GetRecordingsWithDetails returns recordings with their transcripts and summaries
 func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithDetails, error) {
 	// First, get recordings with transcript information (no summary JOIN to avoid duplication)
@@ -450,6 +453,7 @@ func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithD
 			r.id, r.filename, r.display_name, r.file_path, r.file_size, r.duration_seconds,
 			r.sample_rate, r.channels, r.bits_per_sample, r.audio_format,
 			r.recording_mode, r.with_microphone, r.created_at, r.recorded_at, r.notes, r.tags,
+			r.error_message, r.retry_file_path,
 			t.id as transcript_id, t.content as transcript_content, t.model_used as transcript_model,
 			t.confidence_score, t.created_at as transcript_created_at
 		FROM recordings r
@@ -467,6 +471,10 @@ func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithD
 
 	for rows.Next() {
 		var recording RecordingWithDetails
+		var displayName, notes, tags sql.NullString
+		var durationSeconds sql.NullFloat64
+		var recordedAt sql.NullTime
+		var errorMessage, retryFilePath sql.NullString
 		var transcriptID sql.NullInt64
 		var transcriptContent sql.NullString
 		var transcriptModel sql.NullString
@@ -474,15 +482,41 @@ func (db *DB) GetRecordingsWithDetails(limit int, offset int) ([]*RecordingWithD
 		var transcriptCreatedAt sql.NullTime
 
 		err := rows.Scan(
-			&recording.ID, &recording.Filename, &recording.DisplayName, &recording.FilePath,
-			&recording.FileSize, &recording.DurationSeconds, &recording.SampleRate,
+			&recording.ID, &recording.Filename, &displayName, &recording.FilePath,
+			&recording.FileSize, &durationSeconds, &recording.SampleRate,
 			&recording.Channels, &recording.BitsPerSample, &recording.AudioFormat,
 			&recording.RecordingMode, &recording.WithMicrophone, &recording.CreatedAt,
-			&recording.RecordedAt, &recording.Notes, &recording.Tags,
+			&recordedAt, &notes, &tags,
+			&errorMessage, &retryFilePath,
 			&transcriptID, &transcriptContent, &transcriptModel, &confidenceScore, &transcriptCreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan recording with details: %w", err)
+		}
+
+		// Convert nullable fields to pointers
+		if displayName.Valid {
+			recording.DisplayName = &displayName.String
+		}
+		if durationSeconds.Valid {
+			recording.DurationSeconds = &durationSeconds.Float64
+		}
+		if recordedAt.Valid {
+			recording.RecordedAt = &recordedAt.Time
+		}
+		if notes.Valid {
+			recording.Notes = &notes.String
+		}
+		if tags.Valid {
+			recording.Tags = &tags.String
+		}
+
+		// Set error tracking fields if available
+		if errorMessage.Valid {
+			recording.ErrorMessage = &errorMessage.String
+		}
+		if retryFilePath.Valid {
+			recording.RetryFilePath = &retryFilePath.String
 		}
 
 		// Set transcript fields if available

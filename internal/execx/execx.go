@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 // BuildWhisperArgs builds arguments for whisper.cpp CLI.
@@ -63,10 +62,8 @@ func RunWhisper(whisperBin, modelPath, wavPath, outDir, lang string, threads int
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 
-	// Hide CMD window on Windows
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow: true,
-	}
+	// Hide CMD window on Windows when supported
+	setHideWindow(cmd)
 
 	err := cmd.Run()
 

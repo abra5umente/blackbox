@@ -33,6 +33,7 @@ No test suite currently exists. Manual testing via GUI.
 ### Backend (Go)
 - **Entry point**: `main.go` - Wails app initialization
 - **Core logic**: `internal/ui/app.go` - Main app struct with all GUI-exposed methods
+- **Logging**: Structured logging with `log/slog` (JSON format) - see logger variable in app.go
 - **Audio capture**: `internal/audio/` - WASAPI loopback and microphone recording via malgo
 - **WAV handling**: `internal/wav/writer.go` - PCM S16LE WAV file writing
 - **External processes**: `internal/execx/execx.go` - Wraps whisper.cpp execution
@@ -72,6 +73,10 @@ No test suite currently exists. Manual testing via GUI.
 - **Models**: `./models/` directory (default: `ggml-base.en.bin`)
 - **Process**: Executes whisper binary, reads .txt output, stores in database
 - **Logs**: Generated in temp directory with transcript output
+- **API Methods**:
+  - `TranscribeRecording(recordingID int)` - Type-safe, recommended
+  - `TranscribeFile(wavPath string)` - For ad-hoc files
+  - `Transcribe(wavPathOrID string)` - **Deprecated**, forwards to above methods
 
 ### AI Summarization
 Two modes controlled by `use_local_ai` setting:
@@ -81,6 +86,9 @@ Two modes controlled by `use_local_ai` setting:
    - Auto-starts server on-demand, shuts down after use
    - Configuration: Model path, temperature, context window, API key
    - Privacy-focused (no external API calls)
+   - **Logging**: Server output logged to `./out/llama-server.log`
+   - **VRAM monitoring**: Detects out-of-memory errors and suggests reducing context size
+   - **Malformed JSON handling**: Automatically fixes LLM responses with literal newlines in JSON strings
 
 2. **Remote AI** (OpenAI-compatible):
    - Configurable base URL, API key, model
@@ -133,13 +141,20 @@ Two modes controlled by `use_local_ai` setting:
 
 ### Local AI Server Management
 - `startLlamaServer()`: Spawns llama-server.exe with hidden window
+  - Logs stdout/stderr to `./out/llama-server.log`
+  - Detects VRAM allocation failures and provides helpful error messages
+  - On failure, shows last 500 chars of log plus full log path
 - `waitForLlamaServer()`: Polls `/health` endpoint until ready (30s timeout)
 - `stopLlamaServer()`: Graceful kill with 5s timeout, then force kill
+  - Properly closes log file handle
 - Server runs on `127.0.0.1:8080` during summarization only
+- **JSON Response Handling**: Automatically fixes malformed JSON from LLMs that output literal newlines instead of `\n` in string values
 
 ### Audio Storage Philosophy
 - **Audio data is NOT stored in database** - only metadata (filename, duration, sample rate, etc.)
 - **Successful transcription**: WAV file is deleted permanently (blackbox philosophy: audio in → text out → audio gone)
+  - File existence checked before deletion to avoid noisy warnings
+  - Deletion failures tracked in `error_message` field for later investigation
 - **Failed transcription**: WAV file moved to `OutDir/retry/` with error tracking in database for manual retry
 - **Tools mode exception**: WAV files saved to `OutDir/saved/` permanently for manual management
 - **Database size**: Stays minimal (~1KB per recording) since only text/metadata is stored
@@ -149,6 +164,7 @@ Two modes controlled by `use_local_ai` setting:
 - Tracks applied migrations in `schema_migrations` table
 - Splits statements on `;` (handles BEGIN/END blocks correctly)
 - Applies in transaction (rollback on error)
+- **Latest migration (007)**: Dropped `audio_data` column from recordings table (enforces audio-never-in-DB philosophy)
 
 ## Common Development Tasks
 
@@ -214,6 +230,9 @@ Two modes controlled by `use_local_ai` setting:
 - **Auto mode**: Temporary WAV files (deleted after successful transcription, moved to `./out/retry/` on failure)
 - **Tools mode**: `./out/saved/` - Permanent storage for manual workflow
 - **Retry directory**: `./out/retry/` - Failed transcriptions with error tracking in database
+- **Log files**:
+  - `llama-server.log` - llama-server stdout/stderr for debugging local AI issues
+  - Transcription logs in temp directory
 - Transcripts: `.txt` files (legacy file-based workflow)
 - Summaries: `*_summary.txt` files (legacy file-based workflow)
 - **Note**: Database is primary storage; audio is NOT stored in database
@@ -250,8 +269,11 @@ Two modes controlled by `use_local_ai` setting:
 - Verify `llama-server.exe` exists in `./llamacpp-bin/`
 - Check model file path in Settings tab
 - Test manual startup: `./llamacpp-bin/llama-server.exe --help`
-- Check server logs (stdout/stderr) for loading errors
-- Ensure sufficient RAM for model (quantized models require less)
+- Check server logs in `./out/llama-server.log` for detailed error messages
+- **VRAM allocation errors**: Reduce context size in Settings (try 4096 or 8192 instead of 16000+)
+- **JSON parsing errors**: Check logs for "failed to parse structured summary payload" - the system now automatically fixes malformed JSON with literal newlines
+- Ensure sufficient VRAM for model (close GPU-intensive apps if needed)
+- For large models, consider reducing `llama_context` to 4096-8192 to fit in available VRAM
 
 ### Database Issues
 - Check `./data/blackbox.db` exists and is writable
@@ -267,12 +289,14 @@ Two modes controlled by `use_local_ai` setting:
 
 ## Code Style Conventions
 
-- Go: Standard Go formatting (`gofmt`)
-- Error handling: Always return errors, log warnings to console
-- File paths: Use `filepath.Join()` for cross-platform compatibility
-- SQL: Use parameterized queries (never string concatenation)
-- Frontend: Vanilla JavaScript (no frameworks), Tailwind utility classes
-- Comments: Document public methods and complex logic
+- **Go**: Standard Go formatting (`gofmt`)
+- **Error handling**: Always return errors, use structured logging for warnings/info
+- **Logging**: Use `logger.Info/Warn/Error()` with key-value pairs (not fmt.Printf)
+- **File paths**: Use `filepath.Join()` for cross-platform compatibility
+- **SQL**: Use parameterized queries (never string concatenation)
+- **Frontend**: Vanilla JavaScript (no frameworks), Tailwind utility classes
+- **Comments**: Document public methods and complex logic
+- **API methods**: Return `(result, error)` pattern for all Wails-exposed methods
 
 ## Git Repository
 

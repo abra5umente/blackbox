@@ -19,7 +19,6 @@ export namespace db {
 	    recorded_at?: any;
 	    notes?: string;
 	    tags?: string;
-	    audio_data?: number[];
 	    error_message?: string;
 	    retry_file_path?: string;
 	
@@ -45,7 +44,6 @@ export namespace db {
 	        this.recorded_at = this.convertValues(source["recorded_at"], null);
 	        this.notes = source["notes"];
 	        this.tags = source["tags"];
-	        this.audio_data = source["audio_data"];
 	        this.error_message = source["error_message"];
 	        this.retry_file_path = source["retry_file_path"];
 	    }
@@ -140,7 +138,6 @@ export namespace db {
 	    recorded_at?: any;
 	    notes?: string;
 	    tags?: string;
-	    audio_data?: number[];
 	    error_message?: string;
 	    retry_file_path?: string;
 	    transcript_id?: number;
@@ -173,7 +170,6 @@ export namespace db {
 	        this.recorded_at = this.convertValues(source["recorded_at"], null);
 	        this.notes = source["notes"];
 	        this.tags = source["tags"];
-	        this.audio_data = source["audio_data"];
 	        this.error_message = source["error_message"];
 	        this.retry_file_path = source["retry_file_path"];
 	        this.transcript_id = source["transcript_id"];
