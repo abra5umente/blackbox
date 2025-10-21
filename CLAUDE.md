@@ -26,7 +26,17 @@ wails build  # Builds final executable with automatic Tailwind CSS compilation
 - **Output**: `frontend/dist/output.css`
 
 ### Testing
-No test suite currently exists. Manual testing via GUI.
+```powershell
+# PowerShell (Windows - recommended)
+./run-tests.ps1
+```
+```bash
+# Git Bash / WSL / macOS / Linux
+./run-tests.sh
+```
+- Test scripts automatically set `GOCACHE` and `BLACKBOX_MIGRATIONS_DIR` for isolated test environments
+- Non-Windows builds use stub files (`audio_stub.go`, `sys_other.go`) to satisfy imports
+- Windows-specific functionality (audio capture, process window hiding) only works on Windows builds
 
 ## Architecture
 
@@ -96,19 +106,22 @@ Two modes controlled by `use_local_ai` setting:
    - Supports any OpenAI-compatible endpoint
 
 ### Database Operations
-- **Automatic migrations**: Loads `.sql` files from `migrations/` directory on startup
+- **Automatic migrations**: Loads `.sql` files from `migrations/` directory on startup (configurable via `BLACKBOX_MIGRATIONS_DIR` env var)
 - **CRUD operations**: Separate files per entity (`recordings.go`, `transcripts.go`, `summaries.go`)
 - **Search**: FTS5 full-text search on transcript content
 - **Relationships**: Foreign keys with cascade delete
 - **Metadata tracking**: Processing times, model versions, error logs
+- **Backup/Restore**: Manual file copy of `./data/blackbox.db` (plain SQLite file, no encryption)
 
 ### Frontend Features
 - **Real-time spectrum analyzer**: 32-bar frequency visualization (60fps animation)
 - **Markdown rendering**: Uses marked.js (CDN) for formatted transcript/summary display
+- **Copy to clipboard**: One-click summary copying with visual feedback
 - **Tab structure**:
-  - **Auto**: Complete workflow (record → transcribe → summarize)
+  - **Auto**: Complete workflow (record → transcribe → summarize) with formatted output
   - **Tools**: Individual operations with manual control
   - **Settings**: Configuration management
+  - **Database**: Browse recordings, transcripts, and summaries with search/filter
 
 ## Wails-Specific Patterns
 
@@ -302,4 +315,15 @@ Two modes controlled by `use_local_ai` setting:
 
 - **Main branch**: `main`
 - **Current branch**: `next`
-- Recent commits focus on: LLM configuration, database management, UI improvements
+- Recent commits focus on: Testing infrastructure, structured logging, database optimization, type-safe APIs, UI enhancements
+
+## Recent Updates
+
+### October 2025
+- **Testing Infrastructure**: Cross-platform test scripts (`run-tests.ps1`, `run-tests.sh`) with environment variable support
+- **Structured Logging**: Migrated to `log/slog` (JSON format) for better debugging and production monitoring
+- **Type-Safe APIs**: New `TranscribeRecording(id)` and `TranscribeFile(path)` methods (deprecated old `Transcribe(string)`)
+- **Database Optimization**: Migration 007 removed `audio_data` column (enforces audio-never-in-DB philosophy)
+- **Error Tracking**: Enhanced error handling with proper null value management and LIKE pattern escaping
+- **UI Improvements**: Added "Copy Summary" button in Auto tab with visual feedback
+- **Documentation**: Comprehensive updates to CLAUDE.md, README.md, and agents.md with testing patterns and debugging tips
